@@ -193,3 +193,45 @@ dialog::backdrop { background: #01060ac7; backdrop-filter: blur(5px); }
 .preset-weather .preset-art { background-color:#112b36; color:#82c6d5; }
 .preset-stress .preset-art,.recorded .preset-art { background-color:#1b2340; color:#a0b8f0; }
 .preset-airbase .preset-art { background-color:#122a2c; color:#7fd5c2; }
+
+/* Tactical layout on the console theme. */
+.app-header { background: #081321; border-bottom: 1px solid #1b2d3f; }
+.mode-switch { background: #060e18; border-color: #1f344a; }
+.mode-switch button { color: #6f8ba1; }
+.mode-switch button.active { background: #15657f; color: #d8f2fb; }
+.app-header .project-name { color: #bdd8e8; }
+.app-header .button.quiet { color: #7e9cb3; }
+.app-header .button.quiet:hover { background: #14293c; color: #d4ecf5; }
+.app-header .icon-button { color: #7e9cb3; }
+.app-header .icon-button:hover, .app-header .icon-button.active { background: #14293c; color: #58d7d0; }
+.dock { background: #0b1725e8; border: 1px solid #23394e; border-radius: 4px; box-shadow: 0 10px 40px #00070ea8; }
+.dock-head { border-bottom: 1px solid #1c2f42; }
+.dock-title, .dock-tabs button { color: #7b97ad; }
+.dock-tabs button:hover { background: #14293c; color: #cfe6f2; }
+.dock-tabs button.active { background: #133349; color: #7fd7f0; }
+.dock-tabs span { color: #5c7d95; }
+.dock-foot { border-top: 1px solid #1c2f42; }
+.dock-note { color: #7792a6; }
+.dock-note b { color: #9fc0d4; }
+.dock-bottom .dock-drawer { border-top: 1px solid #1c2f42; }
+.defence-hud { background: #0a1623d9; border: 1px solid #27455c; border-radius: 4px; box-shadow: 0 6px 28px #00060cb0; }
+.defence-hud > div { background: #0d1a2866; }
+.defence-hud span { color: #6c8aa1; }
+.defence-hud b { color: #cde6f5; }
+.defence-hud small { color: #6c8aa1; }
+.defence-hud .live b { color: #52c8f5; }
+.defence-hud .good b { color: #49dcae; }
+.defence-hud .bad b { color: #ff9a62; }
+.hud-sentries { border-left: 1px solid #23415a; }
+.threat-form .field input { background: var(--input); }
+.sensor-card { background: #0a1825; border-color: #22405a; border-radius: 4px; }
+.sensor-head b { color: #a8cde0; }
+.sensor-head small { color: #6b889c; }
+.sensor-card dt { color: #6e8ca2; }
+.sensor-card dd { color: #9ed3ea; }
+.render-switch { background: #0a1623d9; border: 1px solid #27455c; border-radius: 4px; }
+.render-switch > span { color: #6c8aa1; }
+.render-switch button { color: #7b97ad; }
+.render-switch button.active { background: #133349; color: #7fd7f0; }
+.map-tools .button { background: #0e1e2d; border-color: #24405a; color: #9dbed2; }
+.map-tools .button:hover { background: #14293c; color: #d6edf6; }
