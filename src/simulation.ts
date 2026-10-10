@@ -1,4 +1,7 @@
+import { bearingOf, contact, interceptPoint } from './defence';
 import { clone, isActive, SIMULATOR_VERSION, STEP, type ScenarioDocument, type Snapshot, type UnitState, type RunRecord, type Vehicle, type Vec3, type Observation } from './types';
+
+const separation = (first: Vec3, second: Vec3) => Math.hypot(second.x - first.x, second.y - first.y, second.z - first.z);
 
 export function temperatureFactor(temperature: number) { return Math.max(0.55, Math.min(1, 1 - Math.max(0, 20 - temperature) * 0.008)); }
 export function powerAt(vehicle: Vehicle, speed: number) {
@@ -24,7 +27,13 @@ export class Simulation {
     this.randomState = scenario.seed >>> 0;
     const units: UnitState[] = scenario.vehicles.map(vehicle => {
       const capacity = vehicle.batteryWh * temperatureFactor(scenario.weather.temperature);
-      return { id: vehicle.id, position: clone(vehicle.position), velocity: { x: 0, y: 0, z: 0 }, airspeed: 0, groundSpeed: 0, energy: capacity, capacity, battery: 100, status: 'waiting', waypoint: 0, distance: 0, departureAt: vehicle.departAt };
+      // A covering sentry is already up when the run starts; it was never waiting in a garage.
+      const covering = Boolean(vehicle.defence) && vehicle.departAt <= 0;
+      return {
+        id: vehicle.id, position: clone(vehicle.position), velocity: { x: 0, y: 0, z: 0 }, airspeed: 0, groundSpeed: 0,
+        energy: capacity, capacity, battery: 100, status: covering ? 'airborne' : 'waiting', waypoint: 0, distance: 0, departureAt: vehicle.departAt,
+        task: vehicle.defence ? 'hold' : 'none', targetId: '', tracking: '', trackCount: 0, kills: 0, heading: vehicle.defence?.heading ?? 0,
+      };
     });
     this.snapshot = { tick: 0, time: 0, units, logs: [], observations: [], observationCount: 0, finished: false };
     this.record = { schemaVersion: 1, simulatorVersion: SIMULATOR_VERSION, createdAt: new Date().toISOString(), scenario: clone(scenario), frames: [], telemetry: [], logs: [], observations: [] };
@@ -74,6 +83,7 @@ export class Simulation {
         }
         if (!isActive(unit.status)) return;
         if (unit.status === 'rolling') this.roll(unit, vehicle, wind);
+        else if (vehicle.defence) this.cover(unit, vehicle, wind);
         else this.fly(unit, vehicle, wind);
         if (!isActive(unit.status)) return;
         unit.energy = Math.max(0, unit.energy - powerAt(vehicle, unit.airspeed) * STEP / 3600);
@@ -83,6 +93,7 @@ export class Simulation {
           this.log('warning', `${vehicle.label}: battery exhausted, flight ended`, unit.id);
         }
       });
+      this.engage();
       if (this.snapshot.tick % 20 === 0) this.observe();
       const delivered = this.pending.filter(observation => observation.deliveredAt <= this.snapshot.time);
       this.pending = this.pending.filter(observation => observation.deliveredAt > this.snapshot.time);
@@ -112,7 +123,13 @@ export class Simulation {
   }
   private fly(unit: UnitState, vehicle: Vehicle, wind: Vec3) {
     const destination = vehicle.route[unit.waypoint];
-    if (!destination) { unit.status = 'complete'; unit.velocity = { x: 0, y: 0, z: 0 }; unit.airspeed = 0; unit.groundSpeed = 0; this.log('flight', `${vehicle.label}: route complete`, unit.id); return; }
+    if (!destination) {
+      unit.status = 'complete'; unit.velocity = { x: 0, y: 0, z: 0 }; unit.airspeed = 0; unit.groundSpeed = 0;
+      // A hostile that runs its course out was never stopped: it reached what it was aimed at.
+      if (vehicle.role === 'hostile') this.log('warning', `${vehicle.label}: reached its aim point unengaged`, unit.id);
+      else this.log('flight', `${vehicle.label}: route complete`, unit.id);
+      return;
+    }
     const offset = { x: destination.x - unit.position.x, y: destination.y - unit.position.y, z: destination.z - unit.position.z };
     const distance = Math.hypot(offset.x, offset.y, offset.z);
     const targetSpeed = Math.min(vehicle.speed, vehicle.maxSpeed);
@@ -125,6 +142,109 @@ export class Simulation {
     unit.groundSpeed = Math.hypot(unit.velocity.x, unit.velocity.z);
     unit.position.x += unit.velocity.x * STEP; unit.position.y = Math.max(3, unit.position.y + unit.velocity.y * STEP); unit.position.z += unit.velocity.z * STEP;
     unit.distance += Math.hypot(unit.velocity.x, unit.velocity.y, unit.velocity.z) * STEP;
+  }
+  /**
+   * A covering sentry flies to one point: its station while it waits, its assigned target while it
+   * runs an intercept. Holding costs the hover end of the power curve, so station time still drains.
+   */
+  private cover(unit: UnitState, vehicle: Vehicle, wind: Vec3) {
+    const defence = vehicle.defence!;
+    const chase = unit.task === 'intercept' ? this.snapshot.units.find(item => item.id === unit.targetId) : undefined;
+    // Lead the target. Flying at where it is now loses every tail chase against a comparable speed.
+    const lead = chase && interceptPoint(unit.position, Math.min(vehicle.speed, vehicle.maxSpeed), chase.position, chase.velocity);
+    const destination = chase ? lead?.point ?? chase.position : defence.station;
+    const offset = { x: destination.x - unit.position.x, y: destination.y - unit.position.y, z: destination.z - unit.position.z };
+    const distance = Math.hypot(offset.x, offset.y, offset.z);
+    const horizontal = Math.hypot(offset.x, offset.z);
+    const arrived = Math.max(3, unit.airspeed * STEP * 2);
+    if (!chase && distance <= arrived) {
+      unit.position = clone(defence.station); unit.heading = defence.heading;
+      unit.velocity = { x: 0, y: 0, z: 0 }; unit.airspeed = 0; unit.groundSpeed = 0;
+      if (unit.task === 'return') { unit.task = 'hold'; this.log('flight', `${vehicle.label}: back on station`, unit.id); }
+      return;
+    }
+    // A multirotor can yaw independently of its track, so the radar stays on the target while the
+    // airframe translates toward the meeting point. The hard kill needs the target inside the cone.
+    if (chase) unit.heading = bearingOf(chase.position.x - unit.position.x, chase.position.z - unit.position.z);
+    else if (horizontal > 0.5) unit.heading = bearingOf(offset.x, offset.z);
+    const targetSpeed = Math.min(vehicle.speed, vehicle.maxSpeed);
+    unit.airspeed = Math.min(targetSpeed, unit.airspeed + 14 * STEP);
+    const vertical = Math.max(-vehicle.climbRate, Math.min(vehicle.climbRate, distance ? offset.y / distance * unit.airspeed : 0));
+    const horizontalSpeed = Math.sqrt(Math.max(0, unit.airspeed ** 2 - vertical ** 2));
+    unit.velocity = {
+      x: horizontal ? offset.x / horizontal * horizontalSpeed + wind.x : 0, y: vertical,
+      z: horizontal ? offset.z / horizontal * horizontalSpeed + wind.z : 0,
+    };
+    unit.groundSpeed = Math.hypot(unit.velocity.x, unit.velocity.z);
+    unit.position.x += unit.velocity.x * STEP; unit.position.y = Math.max(3, unit.position.y + unit.velocity.y * STEP); unit.position.z += unit.velocity.z * STEP;
+    unit.distance += Math.hypot(unit.velocity.x, unit.velocity.y, unit.velocity.z) * STEP;
+  }
+  private label(id: string) { return this.scenario.vehicles.find(vehicle => vehicle.id === id)?.label ?? id; }
+  /**
+   * Detect, assign, engage. Every sentry reports what its own radar sees; a detected intruder is
+   * handed to the nearest sentry that is not already committed, and the hard kill resolves only
+   * when that sentry has the intruder inside its own envelope at engagement range.
+   */
+  private engage() {
+    const vehicles = this.scenario.vehicles;
+    const sentries: { unit: UnitState; vehicle: Vehicle }[] = [];
+    const threats: UnitState[] = [];
+    this.snapshot.units.forEach((unit, index) => {
+      const vehicle = vehicles[index];
+      if (vehicle.defence && isActive(unit.status)) sentries.push({ unit, vehicle });
+      else if (vehicle.role === 'hostile' && isActive(unit.status)) threats.push(unit);
+    });
+    if (!sentries.length) return;
+    const detected = new Set<string>();
+    for (const { unit, vehicle } of sentries) {
+      const sensor = vehicle.defence!.sensor;
+      let nearest = ''; let shortest = Infinity; let count = 0;
+      for (const threat of threats) {
+        const reading = contact(unit.position, unit.heading, sensor, threat.position);
+        if (!reading.seen) continue;
+        count++; detected.add(threat.id);
+        if (reading.measured < shortest) { shortest = reading.measured; nearest = threat.id; }
+      }
+      unit.tracking = nearest; unit.trackCount = count;
+    }
+    for (const { unit } of sentries) {
+      if (unit.task !== 'intercept') continue;
+      const target = this.snapshot.units.find(item => item.id === unit.targetId);
+      if (!target || !isActive(target.status)) { unit.targetId = ''; unit.task = 'return'; }
+    }
+    const committed = new Set(sentries.map(sentry => sentry.unit.targetId).filter(Boolean));
+    for (const threat of threats) {
+      if (!detected.has(threat.id) || committed.has(threat.id)) continue;
+      // Nearest sentry goes, but a sentry with no intercept solution would only tail chase, so one
+      // that can actually meet the run-in wins over a closer one that cannot.
+      let chosen: { unit: UnitState; vehicle: Vehicle } | undefined; let shortest = Infinity;
+      let fallback: { unit: UnitState; vehicle: Vehicle } | undefined; let nearest = Infinity;
+      for (const sentry of sentries) {
+        if (sentry.unit.task === 'intercept') continue;
+        const gap = separation(sentry.unit.position, threat.position);
+        if (gap < nearest) { nearest = gap; fallback = sentry; }
+        const speed = Math.min(sentry.vehicle.speed, sentry.vehicle.maxSpeed);
+        if (!interceptPoint(sentry.unit.position, speed, threat.position, threat.velocity)) continue;
+        if (gap < shortest) { shortest = gap; chosen = sentry; }
+      }
+      if (!chosen) { chosen = fallback; shortest = nearest; }
+      if (!chosen) break;
+      chosen.unit.task = 'intercept'; chosen.unit.targetId = threat.id; committed.add(threat.id);
+      this.log('flight', `${chosen.vehicle.label}: committed to ${this.label(threat.id)}, ${Math.round(shortest)} m`, chosen.unit.id);
+    }
+    for (const { unit, vehicle } of sentries) {
+      if (unit.task !== 'intercept') continue;
+      const defence = vehicle.defence!;
+      const target = this.snapshot.units.find(item => item.id === unit.targetId);
+      if (!target) continue;
+      const reading = contact(unit.position, unit.heading, defence.sensor, target.position);
+      if (!reading.seen || reading.measured > defence.engageRange) continue;
+      target.status = 'stopped'; target.velocity = { x: 0, y: 0, z: 0 }; target.airspeed = 0; target.groundSpeed = 0;
+      unit.kills++; unit.targetId = '';
+      this.log('resolved', `${vehicle.label} stopped ${this.label(target.id)} at ${reading.measured.toFixed(1)} m`, unit.id);
+      if (defence.expendOnKill) { unit.status = 'expended'; unit.task = 'none'; unit.velocity = { x: 0, y: 0, z: 0 }; unit.airspeed = 0; unit.groundSpeed = 0; }
+      else unit.task = 'return';
+    }
   }
   private observe() {
     const settings = this.scenario.observations; const weather = this.scenario.weather;

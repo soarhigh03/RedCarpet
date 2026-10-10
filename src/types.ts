@@ -26,13 +26,17 @@ export type ScenarioDocument = {
   schemaVersion: 1; name: string; description: string; seed: number; duration: number;
   objects: MapObject[]; vehicles: Vehicle[]; events: ScriptEvent[]; weather: Weather;
   referenceMap?: { id: 'fictional-coast-v1'; visible: boolean };
+  threat?: ThreatPlan;
   observations: { noise: number; missRate: number; latency: number };
 };
 export type UnitStatus = 'waiting' | 'rolling' | 'airborne' | 'complete' | 'depleted' | 'stopped' | 'expended' | 'overrun';
+/** What a sentry is doing right now. Vehicles without a defence profile stay on 'none'. */
+export type UnitTask = 'none' | 'hold' | 'intercept' | 'return';
 export type UnitState = {
   id: string; position: Vec3; velocity: Vec3; airspeed: number; groundSpeed: number;
   energy: number; capacity: number; battery: number; status: UnitStatus; waypoint: number;
   distance: number; departureAt: number;
+  task: UnitTask; targetId: string; tracking: string; trackCount: number; kills: number; heading: number;
 };
 export type LogEntry = { time: number; kind: 'resolved' | 'skipped' | 'flight' | 'warning'; label: string; actorId?: string; eventId?: string };
 export type Observation = { observedAt: number; deliveredAt: number; actorId: string; position: Vec3 };
