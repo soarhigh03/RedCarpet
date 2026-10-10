@@ -243,24 +243,29 @@ export class Simulation {
     for (const [targetId, holders] of held) {
       if (committed.has(targetId)) continue;
       const target = this.snapshot.units.find(item => item.id === targetId)!;
-      // "If I am the closest one holding it, I go." Ties fall to the earlier sentry for repeatability.
       const free = holders.filter(holder => holder.unit.task !== 'intercept');
-      const nearest = free.reduce<typeof free[number] | undefined>((best, holder) => !best || holder.range < best.range ? holder : best, undefined);
-      if (!nearest) continue;
-      if (!nearest.solvable) {
+      if (!free.length) continue;
+      if (!free.some(holder => holder.solvable)) {
         // Once per contact, not once per step: the module keeps failing to resolve it every tick.
         if (!this.unresolved.has(targetId)) {
           this.unresolved.add(targetId);
-          this.log('warning', `${nearest.vehicle.label}: ${this.label(targetId)} closing past ${nearest.vehicle.defence!.sensor.velocityRange} m/s, track unresolved`, nearest.unit.id);
+          const sensor = free[0].vehicle.defence!.sensor;
+          this.log('warning', `${free[0].vehicle.label}: ${this.label(targetId)} closing past ${sensor.velocityRange} m/s, track unresolved`, free[0].unit.id);
         }
         continue;
       }
-      const defence = nearest.vehicle.defence!;
-      const crossing = crossingPoint(nearest.unit.position, Math.min(nearest.vehicle.speed, nearest.vehicle.maxSpeed), nearest.vehicle.acceleration, target.position, target.velocity);
-      if (!crossing?.reachable) continue;
-      nearest.unit.task = 'intercept'; nearest.unit.targetId = targetId; committed.add(targetId);
-      this.log('flight', `${nearest.vehicle.label}: ${this.label(targetId)} at ${Math.round(nearest.range)} m, crossing in ${crossing.dash.toFixed(0)} m / ${crossing.dashTime.toFixed(2)} s`, nearest.unit.id);
-      void defence;
+      // "If I am the closest, I go" — but only among the drones that can actually make the crossing.
+      // A badly placed nearest neighbour must not block a slightly further one that can get there.
+      let chosen: typeof free[number] | undefined; let plan: ReturnType<typeof crossingPoint>;
+      for (const holder of free) {
+        if (!holder.solvable) continue;
+        const crossing = crossingPoint(holder.unit.position, Math.min(holder.vehicle.speed, holder.vehicle.maxSpeed), holder.vehicle.acceleration, target.position, target.velocity);
+        if (!crossing?.reachable) continue;
+        if (!chosen || holder.range < chosen.range) { chosen = holder; plan = crossing; }
+      }
+      if (!chosen || !plan) continue;
+      chosen.unit.task = 'intercept'; chosen.unit.targetId = targetId; committed.add(targetId);
+      this.log('flight', `${chosen.vehicle.label}: ${this.label(targetId)} at ${Math.round(chosen.range)} m, crossing in ${plan.dash.toFixed(0)} m / ${plan.dashTime.toFixed(2)} s`, chosen.unit.id);
     }
 
     for (const { unit, vehicle } of sentries) {
