@@ -37,6 +37,11 @@ export class AirfieldScene {
   private actors = new THREE.Group();
   private routes = new THREE.Group();
   private marks = new THREE.Group();
+  /** Sensor envelopes live outside the actor tree so the appearance pass never restyles them. */
+  private coverage = new THREE.Group();
+  private envelopes = new Map<string, THREE.Group>();
+  private tracks: THREE.LineSegments;
+  private showCoverage = true;
   private objects = new Map<string, THREE.Group>();
   private units = new Map<string, THREE.Group>();
   private labels = new Map<string, HTMLElement>();
@@ -75,7 +80,12 @@ export class AirfieldScene {
     this.scene.add(new THREE.HemisphereLight(0xf4fbff, 0x7a8563, 2.5));
     this.sunlight = new THREE.DirectionalLight(0xfff1dc, 3); this.sunlight.position.set(-900, 1800, 600); this.sunlight.castShadow = true;
     this.sunlight.shadow.mapSize.set(2048, 2048); this.sunlight.shadow.camera.left = -2000; this.sunlight.shadow.camera.right = 2000; this.sunlight.shadow.camera.top = 2000; this.sunlight.shadow.camera.bottom = -2000; this.sunlight.shadow.camera.far = 7200; this.sunlight.shadow.normalBias = 2;
-    this.scene.add(this.sunlight, this.holographicGround, this.terrain, this.scenery, this.actors, this.routes, this.marks);
+    this.scene.add(this.sunlight, this.holographicGround, this.terrain, this.scenery, this.actors, this.routes, this.marks, this.coverage);
+    const trackGeometry = new THREE.BufferGeometry();
+    trackGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(75 * 6), 3));
+    trackGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(75 * 6), 3));
+    this.tracks = new THREE.LineSegments(trackGeometry, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
+    this.tracks.frustumCulled = false; this.coverage.add(this.tracks);
     this.camera.position.set(1180, 1200, 1450); this.controls = new OrbitControls(this.camera, this.renderer.domElement); this.controls.target.set(-130, 0, 0); this.controls.enableDamping = true; this.controls.dampingFactor = 0.08; this.controls.maxPolarAngle = Math.PI / 2.1; this.controls.minDistance = 25; this.controls.maxDistance = 6500;
     this.transform = new TransformControls(this.camera, this.renderer.domElement); this.transform.setMode('translate'); this.transform.showY = false; this.transform.setSize(0.65); this.transform.setTranslationSnap(5); this.scene.add(this.transform.getHelper());
     this.transform.addEventListener('dragging-changed', event => { this.controls.enabled = !event.value; });
@@ -174,11 +184,45 @@ export class AirfieldScene {
         addBox(group, 3, treeHeight / 2, 3, 0x7b7761, x, treeHeight / 4, z);
         const crown = new THREE.Mesh(new THREE.ConeGeometry(treeHeight * 0.48, treeHeight, 6), material(index % 2 ? 0x66856d : 0x779277)); crown.position.set(x, treeHeight * 0.75, z); crown.castShadow = true; group.add(crown);
       }
+    } else if (item.kind === 'pod') {
+      const span = Math.min(width, depth);
+      const deck = new THREE.Mesh(new THREE.CylinderGeometry(span / 2, span / 2 * 0.92, 1.6, 8), material(0x3d4f58, 0.6)); deck.position.y = 0.8; deck.castShadow = true; deck.receiveShadow = true; group.add(deck);
+      const ring = new THREE.Mesh(new THREE.RingGeometry(span * 0.3, span * 0.37, 24), new THREE.MeshBasicMaterial({ color: 0x3fd6b4, transparent: true, opacity: 0.75, side: THREE.DoubleSide }));
+      ring.rotation.x = -Math.PI / 2; ring.position.y = 1.7; group.add(ring);
+      for (const corner of [-1, 1]) for (const side of [-1, 1]) addBox(group, 1.6, height, 1.6, 0x8d9aa0, corner * span * 0.34, height / 2, side * span * 0.34);
+      addBox(group, span * 0.22, 0.6, span * 0.22, 0x25333a, 0, 1.75, 0);
     } else {
       const area = new THREE.Mesh(new THREE.PlaneGeometry(width, depth), new THREE.MeshBasicMaterial({ color: 0x46c9b4, transparent: true, opacity: 0.2, side: THREE.DoubleSide })); area.rotation.x = -Math.PI / 2; area.position.y = 2; group.add(area); this.groundText(group, 'H', 0, 0, Math.min(width, depth) * 0.55, Math.min(width, depth) * 0.55);
     }
     group.position.set(item.position.x, item.position.y, item.position.z); group.rotation.y = item.rotation * Math.PI / 180; group.userData.entityId = item.id;
     group.traverse(child => { child.userData.entityId = item.id; }); return group;
+  }
+  /**
+   * The sensor envelope: the horizontal sector the radar covers out to its measurement range, plus
+   * the two elevation limits along the boresight. Forward is local -Z, matching the vehicle models.
+   */
+  private envelope(vehicle: Vehicle) {
+    const sensor = vehicle.defence!.sensor;
+    const group = new THREE.Group();
+    const fov = sensor.horizontalFov * Math.PI / 180;
+    const sector = new THREE.Mesh(
+      new THREE.CircleGeometry(sensor.range, 42, Math.PI / 2 - fov / 2, fov),
+      new THREE.MeshBasicMaterial({ color: 0x3ec5f2, transparent: true, opacity: 0.1, side: THREE.DoubleSide, depthWrite: false, toneMapped: false }),
+    );
+    sector.rotation.x = -Math.PI / 2; group.add(sector);
+    const edge = new THREE.LineBasicMaterial({ color: 0x6fdcff, transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false });
+    const rim: THREE.Vector3[] = [new THREE.Vector3()];
+    for (let step = 0; step <= 42; step++) {
+      const angle = -fov / 2 + fov * step / 42;
+      rim.push(new THREE.Vector3(Math.sin(angle) * sensor.range, 0, -Math.cos(angle) * sensor.range));
+    }
+    rim.push(new THREE.Vector3());
+    group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(rim), edge));
+    const lift = Math.tan(sensor.verticalFov / 2 * Math.PI / 180) * sensor.range;
+    const climb: THREE.Vector3[] = [new THREE.Vector3(0, lift, -sensor.range), new THREE.Vector3(), new THREE.Vector3(0, -lift, -sensor.range)];
+    group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(climb), edge));
+    group.renderOrder = 2;
+    return group;
   }
   private groundText(parent: THREE.Group, value: string, x: number, z: number, width: number, depth: number) {
     const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
@@ -212,6 +256,8 @@ export class AirfieldScene {
     this.terrainDetails.visible = !scenario.referenceMap;
     this.referencePlane.visible = Boolean(scenario.referenceMap?.visible && this.assets.referenceMap);
     for (const group of [this.scenery, this.actors, this.routes]) { dispose(group); group.clear(); }
+    for (const envelope of this.envelopes.values()) { dispose(envelope); this.coverage.remove(envelope); }
+    this.envelopes.clear();
     this.objects.clear(); this.units.clear(); this.labels.clear(); this.labelLayer.replaceChildren();
     scenario.objects.forEach(item => {
       const group = this.mapObject(item); this.scenery.add(group); this.objects.set(item.id, group);
@@ -220,9 +266,16 @@ export class AirfieldScene {
     scenario.vehicles.forEach(vehicle => {
       const group = this.vehicleModel(vehicle); this.actors.add(group); this.units.set(vehicle.id, group);
       const label = document.createElement('button'); label.className = `unit-label ${vehicle.role}`; label.innerHTML = `<i></i><span>${escapeHtml(vehicle.label)}</span>`; label.setAttribute('aria-label', `Select ${vehicle.label}`); label.onclick = () => this.onSelect(vehicle.id); this.labelLayer.append(label); this.labels.set(vehicle.id, label);
+      if (vehicle.defence) {
+        const envelope = this.envelope(vehicle);
+        envelope.position.set(vehicle.defence.station.x, vehicle.defence.station.y, vehicle.defence.station.z);
+        envelope.rotation.y = -vehicle.defence.heading * Math.PI / 180;
+        this.coverage.add(envelope); this.envelopes.set(vehicle.id, envelope);
+      }
       const points = [vehicle.position, ...vehicle.route].map(point => new THREE.Vector3(point.x, Math.max(5, point.y), point.z));
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({ color: colors[vehicle.role], dashSize: 16, gapSize: 12, transparent: true, opacity: 0.38 })); line.computeLineDistances(); line.userData.entityId = vehicle.id; this.routes.add(line);
     });
+    this.coverage.visible = this.showCoverage;
     const weather = scenario.weather; this.scene.fog = new THREE.FogExp2(weather.rain > 0.3 ? 0xb7c5ce : 0xd9e4e6, 1 / Math.max(800, weather.visibility) * 0.7); this.scene.background = new THREE.Color(weather.rain > 0.3 ? 0xb7c5ce : 0xd9e4e6); this.rain.visible = weather.rain > 0;
     this.setAppearance(this.appearance);
     this.select(this.selected);
@@ -267,6 +320,7 @@ export class AirfieldScene {
   update(snapshot: Snapshot) { this.lastSnapshot = snapshot; this.unitStates = snapshot.units; }
   setRoutes(visible: boolean) { this.routes.visible = visible; }
   setLabels(visible: boolean) { this.labelLayer.style.display = visible ? '' : 'none'; }
+  setCoverage(visible: boolean) { this.showCoverage = visible; this.coverage.visible = visible; }
   private resize() { const width = this.host.clientWidth; const height = this.host.clientHeight; if (!width || !height) return; this.renderer.setSize(width, height); this.composer?.setSize(width, height); this.camera.aspect = width / height; this.camera.updateProjectionMatrix(); }
   private pick(event: PointerEvent) {
     if (Math.hypot(event.clientX - this.down.x, event.clientY - this.down.y) > 5 || this.transform.dragging || this.transform.axis) return;
@@ -275,13 +329,40 @@ export class AirfieldScene {
     const hit = this.raycaster.intersectObjects([...this.scenery.children, ...this.actors.children], true).find(result => result.object.userData.entityId);
     if (hit) this.onSelect(hit.object.userData.entityId);
   }
+  /** One line per sentry that holds a contact: cool while it only watches, warm once it commits. */
+  private drawTracks() {
+    const position = this.tracks.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const colour = this.tracks.geometry.getAttribute('color') as THREE.BufferAttribute;
+    let pairs = 0;
+    for (const unit of this.unitStates) {
+      if (unit.task === 'none' || !isActive(unit.status)) continue;
+      const committed = unit.task === 'intercept' && Boolean(unit.targetId);
+      const targetId = committed ? unit.targetId : unit.tracking;
+      if (!targetId) continue;
+      const target = this.unitStates.find(item => item.id === targetId);
+      const source = this.units.get(unit.id); const sink = this.units.get(targetId);
+      if (!target || !source || !sink || pairs * 2 + 1 >= position.count) continue;
+      position.setXYZ(pairs * 2, source.position.x, source.position.y, source.position.z);
+      position.setXYZ(pairs * 2 + 1, sink.position.x, sink.position.y, sink.position.z);
+      const tone = committed ? [1, 0.52, 0.26] : [0.33, 0.8, 0.96];
+      colour.setXYZ(pairs * 2, tone[0], tone[1], tone[2]);
+      colour.setXYZ(pairs * 2 + 1, tone[0], tone[1], tone[2]);
+      pairs++;
+    }
+    this.tracks.geometry.setDrawRange(0, pairs * 2);
+    position.needsUpdate = true; colour.needsUpdate = true;
+  }
   private draw() {
     const now = performance.now(); this.frameCount++;
     if (now - this.frameTime >= 1000) { this.fps = this.frameCount * 1000 / (now - this.frameTime); this.frameCount = 0; this.frameTime = now; }
     this.unitStates.forEach(unit => {
       const group = this.units.get(unit.id); if (!group) return;
       group.position.lerp(new THREE.Vector3(unit.position.x, unit.position.y, unit.position.z), this.running ? 0.32 : 1);
-      if (Math.hypot(unit.velocity.x, unit.velocity.z) > 0.1) group.rotation.y = Math.atan2(-unit.velocity.x, -unit.velocity.z);
+      // A sentry yaws to keep its radar on a contact, so its own heading wins over its track.
+      if (unit.task !== 'none') group.rotation.y = -unit.heading * Math.PI / 180;
+      else if (Math.hypot(unit.velocity.x, unit.velocity.z) > 0.1) group.rotation.y = Math.atan2(-unit.velocity.x, -unit.velocity.z);
+      const envelope = this.envelopes.get(unit.id);
+      if (envelope) { envelope.position.copy(group.position); envelope.rotation.y = group.rotation.y; envelope.visible = isActive(unit.status); }
       const flightVisual = group.userData.flightVisual as THREE.Group | undefined;
       if (flightVisual) { const pitch = unit.status === 'airborne' ? Math.atan2(unit.velocity.y, Math.max(1, Math.hypot(unit.velocity.x, unit.velocity.z))) : 0; flightVisual.rotation.x += (pitch - flightVisual.rotation.x) * 0.18; }
       group.visible = !['stopped', 'expended', 'complete'].includes(unit.status);
@@ -289,6 +370,7 @@ export class AirfieldScene {
       label.classList.toggle('inactive', !isActive(unit.status) && unit.status !== 'waiting');
       label.dataset.status = unit.status;
     });
+    this.drawTracks();
     const focused = this.units.get(this.selected) ?? this.objects.get(this.selected);
     this.selectedRing.visible = Boolean(focused && focused.visible);
     if (focused) {
