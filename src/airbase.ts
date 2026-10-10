@@ -21,6 +21,9 @@ export function airbasePoint(u: number, v: number, y = 0): Vec3 {
 
 export const AIRBASE_RUNWAY = { length: 2700, width: 60, usable: 2400 };
 
+/** Repeatable 0–1 scatter for the generated woodland belt, so the layout is identical on every load. */
+const scatter = (value: number) => { const noise = Math.sin(value * 127.1 + 311.7) * 43758.5453; return noise - Math.floor(noise); };
+
 /** Shelter rows are generated; each entry is a [along-runway, across-runway] centre in local metres. */
 const SHELTER_ROW_A = [-1000, -800, -600, -400, -200, 0, 200, 400, 600, 800, 1000, 1200];
 const SHELTER_ROW_B = [-1000, -800, -600, -400, 400, 600, 800, 1000];
@@ -90,13 +93,25 @@ export function airbaseObjects(): MapObject[] {
   add('fence-north', 'North perimeter road', 'taxiway', 1650, 480, 2160, 1, 16);
   add('fence-south', 'South perimeter road', 'taxiway', -1650, 480, 2160, 1, 16);
 
-  // Wooded ground: a strip inside the fence, hills outside it.
+  // Wooded ground inside the fence.
   add('grove-inner', 'West tree line', 'trees', 300, -390, 220, 26, 1500);
-  add('grove-west-north', 'Northwest hills', 'trees', 1000, -950, 480, 34, 900);
-  add('grove-west-south', 'Southwest hills', 'trees', -500, -1000, 560, 32, 1200);
-  add('grove-north', 'North woodland', 'trees', 2050, 300, 900, 30, 520);
-  add('grove-south', 'South woodland', 'trees', -2050, 250, 820, 28, 480);
-  add('grove-east', 'East woodland', 'trees', -900, 1900, 480, 26, 900);
+  add('grove-inner-south', 'Southwest tree line', 'trees', -1150, -350, 220, 24, 700);
+  add('grove-inner-north', 'North tree line', 'trees', 1480, 900, 420, 24, 240);
+
+  // Woodland outside the perimeter: a jittered belt that wraps the base and stops at the edge of
+  // the modelled ground. Groves are ordinary map objects, so any of them can be moved or deleted.
+  let stand = 0;
+  for (let column = 0; column < 13; column++) for (let row = 0; row < 12; row++) {
+    const seed = column * 31 + row;
+    const u = Math.round(-2850 + column * 475 + (scatter(seed) - 0.5) * 180);
+    const v = Math.round(-2400 + row * 460 + (scatter(seed + 71) - 0.5) * 180);
+    if (Math.abs(u) < 1820 && v > -780 && v < 1740) continue;
+    const point = airbasePoint(u, v);
+    if (Math.abs(point.x) > 2650 || Math.abs(point.z) > 2550) continue;
+    stand++;
+    add(`wood-${column}-${row}`, `Outer woodland ${String(stand).padStart(2, '0')}`, 'trees',
+      u, v, 360 + Math.round(scatter(seed + 17) * 260), 24 + Math.round(scatter(seed + 5) * 16), 360 + Math.round(scatter(seed + 41) * 260));
+  }
 
   return objects;
 }

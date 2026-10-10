@@ -6,10 +6,13 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 export const MODEL_FILES = ['military-jet', 'hostile-drone', 'tree-a', 'tree-b', 'tree-a-lod', 'tree-b-lod'] as const;
 type ModelName = typeof MODEL_FILES[number];
 type ModelPart = { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[]; matrix: THREE.Matrix4 };
+/** Repeatable 0–1 scatter, so a grove lays out identically on every load without a visible lattice. */
+const scatter = (value: number) => { const noise = Math.sin(value * 127.1 + 311.7) * 43758.5453; return noise - Math.floor(noise); };
 
 export class SceneAssets {
   private models = new Map<ModelName, THREE.Group>();
   private treeParts = new Map<ModelName, ModelPart[]>();
+  private distantParts = new Map<string, ModelPart[]>();
   grass?: THREE.Texture;
   referenceMap?: THREE.Texture;
   async load(): Promise<string[]> {
@@ -77,28 +80,50 @@ export class SceneAssets {
     template.traverse(child => { if (child instanceof THREE.Mesh) parts.push({ geometry: child.geometry, material: child.material, matrix: normalize.clone().multiply(child.matrixWorld) }); });
     this.treeParts.set(name, parts); return parts;
   }
+  /**
+   * Far stand-in for a supplied tree: a few dozen triangles in the same normalized space the GLB
+   * parts use, so one instance matrix drives every level. Woodland is mostly seen from kilometres
+   * away, where the detailed meshes cost thousands of triangles each and read as the same green mass.
+   */
+  private distant(variant: 'a' | 'b'): ModelPart[] {
+    const cached = this.distantParts.get(variant); if (cached) return cached;
+    const narrow = variant === 'a';
+    const canopy = new THREE.ConeGeometry(narrow ? 0.34 : 0.43, narrow ? 0.84 : 0.72, 6);
+    const trunk = new THREE.CylinderGeometry(0.03, 0.055, 0.46, 4);
+    const parts: ModelPart[] = [
+      { geometry: trunk, material: new THREE.MeshStandardMaterial({ color: 0x6b6450, roughness: 1, metalness: 0 }), matrix: new THREE.Matrix4().makeTranslation(0, 0.23, 0) },
+      { geometry: canopy, material: new THREE.MeshStandardMaterial({ color: narrow ? 0x5e7d64 : 0x74906f, roughness: 1, metalness: 0 }), matrix: new THREE.Matrix4().makeTranslation(0, narrow ? 0.58 : 0.64, 0) },
+    ];
+    this.distantParts.set(variant, parts); return parts;
+  }
+  /** Tree count follows the footprint, so a large woodland fills out instead of scattering a dozen trees. */
+  private static density(width: number, depth: number) { return Math.max(12, Math.min(60, Math.round(width * depth / 8000))); }
   grove(width: number, height: number, depth: number): THREE.LOD | undefined {
     if (!this.models.has('tree-a') || !this.models.has('tree-b')) return;
     const lod = new THREE.LOD();
-    for (const distant of [false, true]) {
-      const level = new THREE.Group();
+    const count = SceneAssets.density(width, depth);
+    // Every level stands the same trees in the same places, so the placement is solved once.
+    const placement = { a: [] as THREE.Matrix4[], b: [] as THREE.Matrix4[] };
+    for (const variant of ['a', 'b'] as const) for (let index = 0; index < count; index++) {
+      const tree = index * 2 + (variant === 'a' ? 0 : 1);
+      const treeHeight = height * (0.65 + scatter(tree + 7) * 0.5);
+      const position = new THREE.Vector3((scatter(tree) - 0.5) * width * 0.92, 0, (scatter(tree + 53) - 0.5) * depth * 0.92);
+      const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), scatter(tree + 211) * Math.PI * 2);
+      placement[variant].push(new THREE.Matrix4().compose(position, rotation, new THREE.Vector3().setScalar(treeHeight)));
+    }
+    const transform = new THREE.Matrix4();
+    for (const [level, distance] of [0, 340, 1100].entries()) {
+      const group = new THREE.Group();
       for (const variant of ['a', 'b'] as const) {
-        const name: ModelName = `tree-${variant}${distant && this.models.has(`tree-${variant}-lod`) ? '-lod' : ''}`;
-        for (const part of this.parts(name)) {
-          const mesh = new THREE.InstancedMesh(part.geometry, part.material, 12);
+        const name: ModelName = `tree-${variant}${level === 1 && this.models.has(`tree-${variant}-lod`) ? '-lod' : ''}`;
+        for (const part of level === 2 ? this.distant(variant) : this.parts(name)) {
+          const mesh = new THREE.InstancedMesh(part.geometry, part.material, count);
           mesh.userData.sharedAsset = true; mesh.castShadow = true; mesh.receiveShadow = true;
-          for (let index = 0; index < 12; index++) {
-            const tree = index * 2 + (variant === 'a' ? 0 : 1);
-            const treeHeight = height * (0.65 + (Math.sin(tree * 10) + 1) * 0.25);
-            const position = new THREE.Vector3(Math.sin(tree * 27.1) * width * 0.42, 0, Math.cos(tree * 19.7) * depth * 0.42);
-            const rotation = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), tree * 2.4);
-            const transform = new THREE.Matrix4().compose(position, rotation, new THREE.Vector3().setScalar(treeHeight));
-            mesh.setMatrixAt(index, transform.multiply(part.matrix));
-          }
-          mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); level.add(mesh);
+          for (let index = 0; index < count; index++) mesh.setMatrixAt(index, transform.multiplyMatrices(placement[variant][index], part.matrix));
+          mesh.instanceMatrix.needsUpdate = true; mesh.computeBoundingSphere(); group.add(mesh);
         }
       }
-      lod.addLevel(level, distant ? 850 : 0, 0.15);
+      lod.addLevel(group, distance, 0.15);
     }
     return lod;
   }
