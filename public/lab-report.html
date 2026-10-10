@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Indoor sensing &amp; FPGA lab — Airfield Defense Sandbox</title>
+<style>
+:root{--ink:#173332;--muted:#5e7371;--teal:#087c72;--line:#d7e5e0;--paper:#f1f5f2;--soft:#eaf6f0}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:1200px;margin:36px auto;padding:48px;background:#fff;border:1px solid var(--line);border-radius:20px}
+header{border-bottom:1px solid var(--line);padding-bottom:30px;margin-bottom:32px}
+.eyebrow{color:var(--teal);font-size:12px;letter-spacing:.14em;font-weight:750;text-transform:uppercase}
+h1{font-size:clamp(30px,4vw,49px);line-height:1.08;letter-spacing:-.045em;margin:14px 0 18px}
+h2{font-size:23px;letter-spacing:-.025em;margin:34px 0 12px}
+h3{font-size:16px;margin:0 0 7px}
+p{margin:10px 0}
+.lead{font-size:18px;max-width:870px;color:var(--muted)}
+.meta{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:20px}
+.badge{border:1px solid var(--line);padding:5px 10px;border-radius:100px}
+button{background:var(--teal);border:0;color:#fff;border-radius:8px;padding:9px 15px;font:inherit;cursor:pointer}
+button:focus-visible,a:focus-visible{outline:3px solid #ecad47;outline-offset:3px}
+a{color:var(--teal);text-underline-offset:3px;overflow-wrap:anywhere}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:24px 0}
+.card{padding:21px;background:var(--soft);border:1px solid var(--line);border-radius:12px}
+.number{font-size:31px;letter-spacing:-.04em;font-weight:750;color:var(--teal)}
+.small{font-size:12px;color:var(--muted)}
+.callout{border-left:4px solid var(--teal);background:var(--soft);padding:17px 22px;border-radius:0 10px 10px 0;margin:20px 0}
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:11px;margin:16px 0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{background:#edf4f0;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);text-align:left}
+th,td{padding:15px;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:650}
+.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+tfoot{background:var(--soft);font-weight:750}
+.source{display:block;font-size:11px;margin-top:8px;font-weight:450}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+ol,ul{padding-left:22px}
+li{margin:8px 0}
+footer{border-top:1px solid var(--line);margin-top:36px;padding-top:18px;color:var(--muted);font-size:12px}
+@media(max-width:760px){main{margin:0;padding:24px 18px;border:0;border-radius:0}.cards,.split{grid-template-columns:1fr}.specs{min-width:720px}th,td{padding:11px}}
+@media print{@page{size:A4;margin:14mm}body{background:#fff;font-size:10pt}main{border:0;margin:0;padding:0;max-width:none}header{padding-bottom:14px;margin-bottom:16px}h1{font-size:28pt}h2{font-size:16pt;margin-top:22px}h3{font-size:11pt}.lead{font-size:12pt}.cards{gap:8px}.card{padding:12px}.number{font-size:23pt}.table-wrap{overflow:visible}.specs{min-width:0}table{font-size:8pt}th,td{padding:8px}tr,.card,.callout{break-inside:avoid}thead{display:table-header-group}button{display:none}a{color:#087c72}.split{gap:16px}.source,.small{font-size:8pt}footer{font-size:8pt}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="eyebrow">Airfield Defense Sandbox / Research note 01</div>
+<h1>Indoor sensing.<br>Independent FPGA learning.</h1>
+<p class="lead">A practical comparison of five development boards for a stationary, non-weapon laboratory. Start small, measure the actual workload, and keep the sensor and FPGA experiments independent.</p>
+<div class="meta"><span class="badge">Research date: October 11, 2026</span><span class="badge">Budget: US$5,000 · computer excluded</span><button type="button" onclick="window.print()">Print / save as PDF</button></div>
+</header>
+<section aria-labelledby="recommendation">
+<h2 id="recommendation">Recommended starting point</h2>
+<p>Begin with an <strong>IWRL6432BOOST</strong> for indoor presence and point-cloud demonstrations and a <strong>PYNQ-Z2 basic kit</strong> for Python, digital-logic, and recorded-data exercises. This is a cost and learning-access recommendation inferred from the documentation and prices below; it is not a measured performance ranking.</p>
+<div class="cards">
+<div class="card"><h3>Two-board starter</h3><div class="number">$430.93</div><p class="small">One IWRL6432BOOST + one PYNQ-Z2 basic kit, before delivery and taxes.</p></div>
+<div class="card"><h3>Practical starter allowance</h3><div class="number">$830.93</div><p class="small">Adds $250 for bench accessories and $150 for shipping, taxes, and price variation.</p></div>
+<div class="card"><h3>Optional comparison lab</h3><div class="number">$4,425.19</div><p class="small">All five candidates plus estimated accessories, instrumentation, and reserves.</p></div>
+</div>
+<p>Choose IWR6843ISK when the coursework specifically needs its onboard DSP. Choose Zybo Z7-20 when the exercises need more external memory or more expansion ports. Add DCA1000 only when an experiment requires raw sample recording: TI's processed-data demos do not require it. <a href="https://e2e.ti.com/support/sensors-group/sensors/f/sensors-forum/1441304/faq-dca1000evm-support-tools-debugging-and-more">TI's DCA1000 explanation</a>.</p>
+<div class="callout"><strong>What this report establishes.</strong> Published resources, board interfaces, tool families, and catalog cost references. No hardware was measured. Power draw, sustained processing rate, latency, and detection quality remain unverified. The simulator's fictional observations and battery parameters are not calibrated to these boards.</div>
+</section>
+<section aria-labelledby="comparison">
+<h2 id="comparison">Documented hardware comparison</h2>
+<div class="table-wrap">
+<table class="specs">
+<thead><tr><th style="width:18%">Candidate</th><th style="width:28%">Compute &amp; memory</th><th style="width:29%">Board access &amp; tools</th><th style="width:25%">Laboratory fit</th></tr></thead>
+<tbody>
+<tr><td>TI IWRL6432BOOST<span class="source">Radar evaluation board</span></td><td>IWRL6432: Cortex-M4F at 160 MHz, radar accelerator, 1 MB on-chip RAM; 2 transmit / 3 receive channels in the 57–64 GHz family.<span class="source"><a href="https://www.ti.com/product/IWRL6432">TI device specifications</a></span></td><td>USB power and processed point-cloud access; onboard XDS110; 60-pin expansion/capture interface. MMWAVE-L-SDK and Code Composer Studio.<span class="source"><a href="https://www.ti.com/tool/IWRL6432BOOST">TI board and tools</a></span></td><td>Lowest-cost sensor candidate in this comparison. Suitable starting point for indoor presence demonstrations and evaluating TI's low-power modes. Published chip specifications do not establish complete-board power consumption.</td></tr>
+<tr><td>TI IWR6843ISK<span class="source">Radar evaluation board</span></td><td>IWR6843: Cortex-R4F at 200 MHz, C674x DSP at 600 MHz, radar accelerator, 1.75 MB internal RAM; 3 transmit / 4 receive channels, 60–64 GHz.<span class="source"><a href="https://www.ti.com/product/IWR6843">TI device specifications</a></span></td><td>Processed point clouds over USB; 60-pin interface for supported capture hardware. MMWAVE-SDK and mmWave Studio; MMWAVEICBOOST provides additional development/trace capabilities.<span class="source"><a href="https://www.ti.com/tool/IWR6843ISK">TI board and tools</a></span></td><td>Useful for learning the TI DSP toolchain and comparing a different sensor architecture. More processors and channels alone do not prove better results for a particular indoor exercise.</td></tr>
+<tr><td>TUL PYNQ-Z2<span class="source">Independent FPGA platform</span></td><td>Zynq XC7Z020; dual Cortex-A9 at 650 MHz; 53,200 LUTs, 220 DSP slices, 630 KB block RAM; 512 MB DDR3, 16 MB QSPI flash, microSD.<span class="source"><a href="https://dpoauwgwqsy2x.cloudfront.net/Download/pynqz2_user_manual_v1_0.pdf">PYNQ-Z2 reference manual</a></span></td><td>Gigabit Ethernet, USB host, USB programming/UART, two Pmod ports, Arduino and Raspberry Pi headers, HDMI and audio. PYNQ image with Python/Jupyter; Vivado for custom logic.<span class="source"><a href="https://www.pynq.io/boards.html">PYNQ images</a> · <a href="https://pynq.readthedocs.io/en/latest/pynq_overlays/pynqz2/pynqz2_base_overlay.html">PYNQ base overlay</a></span></td><td>Best value here for introductory FPGA work and offline datasets. The basic kit includes a microSD card, adapter, USB cable, and Ethernet cable. Some expansion pins are shared.</td></tr>
+<tr><td>Digilent Zybo Z7-20<span class="source">Independent FPGA alternative</span></td><td>Zynq XC7Z020; dual Cortex-A9 at 667 MHz; 53,200 LUTs and 630 KB block RAM. 1 GB DDR3L with 32-bit bus, 16 MB QSPI flash, microSD.<span class="source"><a href="https://digilent.com/reference/_media/reference/programmable-logic/zybo-z7/zybo-z7_rm.pdf">Digilent reference manual</a></span></td><td>Gigabit Ethernet, USB, six Pmod ports, HDMI, audio, Pcam connector. Vivado, Vitis, and PetaLinux tooling. Micro-USB cable is sold separately.<span class="source"><a href="https://digilent.com/shop/zybo-z7-zynq-7000-arm-fpga-soc-development-board/?revpage=2">Digilent specifications and tools</a></span></td><td>More external RAM and expansion than PYNQ-Z2, with the same Zynq-7020 logic class. Confirm board revision and matching reference projects before choosing an image or tutorial.</td></tr>
+<tr><td>TI DCA1000EVM<span class="source">Optional sample-capture adapter</span></td><td>Lattice ECP5 FPGA with DDR3L buffering and 16 MB SPI flash. Its supplied role is capture and streaming, not general application processing.<span class="source"><a href="https://www.ti.com/lit/ug/spruij4a/spruij4a.pdf">TI capture-card guide</a></span></td><td>Supported TI sensor interface to 1 Gb/s Ethernet; USB for configuration. TI capture software / mmWave Studio as applicable to the sensor family.<span class="source"><a href="https://www.ti.com/tool/DCA1000EVM">TI DCA1000EVM</a></span></td><td>Use for raw-data recording to a computer. It is neither a radar sensor nor a Zynq board. Ethernet link speed is not a guaranteed sustained recording rate.</td></tr>
+</tbody>
+</table>
+</div>
+<p class="small">LUT = lookup table; DSP slice = dedicated arithmetic resource; block RAM = memory inside the FPGA. Chip resources and clock rates are specifications, not application benchmarks.</p>
+</section>
+<section aria-labelledby="prices">
+<h2 id="prices">Price references &amp; availability</h2>
+<p>Single-unit USD catalog observations checked on the research date. These are planning references, not binding quotes. Shipping, taxes, tariffs, regional pricing, and availability can change. No orders have been placed.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Item</th><th class="num">Reference price</th><th>Price source &amp; qualification</th></tr></thead>
+<tbody>
+<tr><td>IWRL6432BOOST</td><td class="num">$213.12</td><td><a href="https://www.digikey.com/en/products/detail/texas-instruments/IWRL6432BOOST/21296838">DigiKey product page</a>. Direct page shows $213.12; older indexed listings still show $193.75. Budget uses the direct page.</td></tr>
+<tr><td>IWR6843ISK</td><td class="num">$242.55</td><td><a href="https://www.mouser.com/en/ProductDetail/595-IWR6843ISK">Mouser product listing</a>. USD price visible in indexed catalog content.</td></tr>
+<tr><td>PYNQ-Z2 basic kit · 1M1-M000127DVB</td><td class="num">$217.81</td><td><a href="https://www.newark.com/tul-corporation/1m1-m000127dvb/tul-pynq-z2-basic-kit/dp/69AC1754">Newark product page</a>. Kit, not bare board; listing includes 8 GB microSD, power adapter, USB and Ethernet cables.</td></tr>
+<tr><td>Zybo Z7-20 · 410-351-20</td><td class="num">$483.75</td><td><a href="https://www.mouser.com/en/ProductDetail/Digilent/410-351-20?qs=MyNHzdoqoQJ4PDH1afixlA%3D%3D">Mouser product listing</a>. USD price visible in indexed catalog content; use the -20 part, not the less expensive -10.</td></tr>
+<tr><td>DCA1000EVM · optional</td><td class="num">$987.96</td><td><a href="https://www.mouser.com/en/c/semiconductors/?q=DCA1000EVM">Mouser DCA1000EVM catalog listing</a>. Raw-capture option only; indexed catalog price. Confirm current contents and delivery date.</td></tr>
+</tbody>
+<tfoot><tr><td>All five boards, one of each</td><td class="num">$2,145.19</td><td>Comparison inventory; buying every board is optional.</td></tr></tfoot>
+</table></div>
+</section>
+<section aria-labelledby="compatibility">
+<h2 id="compatibility">Compatibility and accessory decisions</h2>
+<div class="split">
+<div>
+<h3>Keep the first two exercises separate</h3>
+<p>Run a vendor indoor sensing demo on the computer. Use the FPGA board for its own examples and synthetic or recorded datasets. No documented, ready-to-use radar-to-Zynq integration was established for this report; a matching connector or Ethernet port does not establish electrical, protocol, driver, or software compatibility.</p>
+<p>TI documents DCA1000 connectivity for both listed sensor evaluation boards. The IWRL6432 family uses a different SDK and raw-data interface from IWR6843, so follow the exact board revision's supported capture workflow. <a href="https://www.ti.com/tool/IWRL6432BOOST">IWRL6432BOOST documentation</a> · <a href="https://www.ti.com/tool/IWR6843ISK">IWR6843ISK documentation</a>.</p>
+</div>
+<div>
+<h3>Allow for the entire bench setup</h3>
+<ul>
+<li>Appropriate vendor-specified power supplies, USB data cables, Ethernet, spare microSD, and a card reader. The boards do not all use the same power adapter.</li>
+<li>Stable tabletop supports, an ESD mat, and a small power meter. Avoid counting accessories already included in the PYNQ basic kit twice.</li>
+<li>For optional raw capture: a supported host OS/tool version, suitable network adapter and storage, and the correct TI cable/adapter set. Check kit contents before purchasing extras.</li>
+<li>If source-level IWR6843 debugging is needed, price the optional MMWAVEICBOOST separately before buying; it is not included in this board subtotal.</li>
+</ul>
+</div>
+</div>
+<p class="small">PYNQ-Z2 manual documents its supply and shared pins. Digilent documents board-revision changes to Ethernet and flash devices. Tool/OS compatibility must be checked against the chosen release; a web browser running the simulator does not establish support for vendor hardware tools.</p>
+</section>
+<section aria-labelledby="budget">
+<h2 id="budget">An optional lab comfortably below $5,000</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>Budget line</th><th class="num">USD</th><th>Basis</th></tr></thead>
+<tbody>
+<tr><td>All five candidate boards</td><td class="num">$2,145.19</td><td>Published catalog references above.</td></tr>
+<tr><td>Power, cables, cards, mounting &amp; ESD</td><td class="num">$300.00</td><td>Planning allowance; select after checking kit contents.</td></tr>
+<tr><td>Capture storage &amp; network accessories</td><td class="num">$180.00</td><td>Planning allowance, if raw capture is selected.</td></tr>
+<tr><td>Basic bench measurement tools</td><td class="num">$600.00</td><td>Planning allowance for power/voltage measurements; omit tools already owned.</td></tr>
+<tr><td>Delivery, taxes &amp; price variation</td><td class="num">$600.00</td><td>Reserve; actual landed cost depends on destination and supplier.</td></tr>
+<tr><td>Optional adapters / contingency</td><td class="num">$600.00</td><td>Reserve, including any separately justified debug carrier; not a quoted accessory bundle.</td></tr>
+</tbody>
+<tfoot><tr><td>Total planned allocation</td><td class="num">$4,425.19</td><td>$574.81 remains below the ceiling.</td></tr></tfoot>
+</table></div>
+<p>The starter allocation is sufficient to begin learning. The larger budget is an optional comparison inventory, not an integrated-system bill of materials. Computer, labor, custom PCB development, paid third-party software, and live device integration are excluded.</p>
+</section>
+<section aria-labelledby="measurements">
+<h2 id="measurements">Turn specifications into evidence</h2>
+<ol>
+<li><strong>Record the configuration.</strong> Keep board revision, firmware, tool release, supply, and indoor test conditions with each result.</li>
+<li><strong>Measure the board.</strong> Log actual wall-input power, repeatability, data delivery rate, and dropped records during a vendor demonstration.</li>
+<li><strong>Benchmark the learning workload.</strong> Run a fixed offline dataset on each FPGA platform; record completion time, memory use, and programmable-logic utilization. Do not infer performance from clock frequency alone.</li>
+<li><strong>Revisit purchases only after a limitation appears.</strong> Add raw capture or a larger-memory development board when the recorded exercise demonstrates a need.</li>
+</ol>
+</section>
+<footer>
+<p><strong>Report boundaries:</strong> stationary indoor sensing and general FPGA education. No aircraft installation, target selection, interception logic, hardware control integration, or operational effectiveness assessment is included. Source links distinguish manufacturer documentation from distributor pricing. This report can be opened and printed offline; source links require internet access.</p>
+</footer>
+</main>
+</body>
+</html>
+
