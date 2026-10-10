@@ -45,6 +45,11 @@ export function validateScenario(input: unknown): ScenarioDocument {
   number(weather.temperature, 'Temperature', -40, 50); number(weather.rain, 'Rain', 0, 1); number(weather.visibility, 'Visibility', 200, 20000);
   const observations = record(value.observations, 'Observations');
   number(observations.noise, 'Observation noise', 0, 200); number(observations.missRate, 'Miss rate', 0, 1); number(observations.latency, 'Latency', 0, 10);
+  if (value.referenceMap !== undefined) {
+    const reference = record(value.referenceMap, 'Reference map');
+    choice(reference.id, 'Reference map ID', ['fictional-coast-v1']);
+    if (typeof reference.visible !== 'boolean') fail('Reference visibility', 'expected a boolean');
+  }
   return clone(value) as ScenarioDocument;
 }
 export function validateRun(input: unknown): RunRecord {

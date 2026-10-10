@@ -1,0 +1,34 @@
+{
+  "image": "coastal-airfield.png",
+  "width": 1536,
+  "height": 1024,
+  "source": "New built-in imagegen generation; no input photographs or reference images.",
+  "coordinateSystem": "Pixels, origin at upper-left; x increases rightward, y increases downward. Rectangles are visually estimated footprint bounds.",
+  "rectangles": [
+    { "id": "runway", "x": 91, "y": 199, "width": 1347, "height": 67 },
+    { "id": "taxiway-parallel", "x": 175, "y": 332, "width": 1180, "height": 40 },
+    { "id": "taxiway-west-link", "x": 154, "y": 267, "width": 41, "height": 85 },
+    { "id": "taxiway-east-link", "x": 1334, "y": 267, "width": 42, "height": 85 },
+    { "id": "taxiway-apron-link", "x": 743, "y": 371, "width": 44, "height": 44 },
+    { "id": "apron", "x": 447, "y": 414, "width": 638, "height": 204 },
+    { "id": "hangar-west", "x": 460, "y": 627, "width": 90, "height": 94 },
+    { "id": "hangar-middle", "x": 569, "y": 627, "width": 89, "height": 94 },
+    { "id": "hangar-east", "x": 677, "y": 628, "width": 89, "height": 93 },
+    { "id": "terminal", "x": 913, "y": 631, "width": 150, "height": 63 },
+    { "id": "tower-roof", "x": 1101, "y": 622, "width": 39, "height": 43, "shape": "octagon", "note": "Visible roof; tower base is estimated about 20 pixels lower. Ground block can be centered near 1119,663." },
+    { "id": "grove-northwest", "x": 0, "y": 0, "width": 265, "height": 202 },
+    { "id": "grove-southwest", "x": 0, "y": 379, "width": 405, "height": 431 },
+    { "id": "grove-northeast", "x": 1360, "y": 0, "width": 176, "height": 190 },
+    { "id": "grove-southeast", "x": 1270, "y": 302, "width": 266, "height": 508 }
+  ],
+  "regions": [
+    { "id": "beach", "bounds": [0, 783, 1536, 108], "note": "Irregular shoreline; central sand band mostly y=807..855." },
+    { "id": "water", "bounds": [0, 837, 1536, 187], "note": "Irregular upper boundary; uninterrupted water below approximately y=920." }
+  ],
+  "notes": [
+    "The runway and apron are visually crisp; taxiway end curves can use short rounded connectors rather than filling every rectangle corner.",
+    "Hangar and terminal rectangles use visible roofs and exclude their slight shadows and surrounding roads.",
+    "All geography is invented. These estimates describe artwork only; they are not surveyed dimensions.",
+    "Suggested planar conversion: worldX=(pixelX-768)*metersPerPixel; worldZ=(pixelY-512)*metersPerPixel. Use a consistent image texture orientation in the renderer."
+  ]
+}

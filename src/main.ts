@@ -1,4 +1,5 @@
 import './style.css';
+import { mountImageMapEditor } from './image-map-editor';
 import { AirfieldScene } from './scene';
 import { makeScenario, makeVehicle, presets } from './scenarios';
 import { csv, escapeHtml as html, loadRun, saveRun, validateRun, validateScenario } from './data';
@@ -44,11 +45,11 @@ $('#app').innerHTML = `
     <nav class="main-nav" aria-label="Main navigation"><button class="active" data-action="panel" data-value="workspace">${icon('map')} Workspace</button><button data-action="panel" data-value="analysis">${icon('chart')} Analysis</button><a href="./lab-report.html" target="_blank" rel="noopener">${icon('layers')} Hardware lab <span class="external">↗</span></a></nav>
     <div class="header-end"><span class="version-tag">FICTIONAL SIMULATION</span><button class="icon-button header-help" data-action="help" aria-label="Help">${icon('info')}</button><span class="avatar">NS</span></div>
   </header>
-  <section class="project-bar"><div class="project-heading"><span class="project-icon">${icon('folder', 21)}</span><div><div class="eyebrow">PROJECT / LOCAL WORKSPACE</div><button class="project-name" data-action="settings"><span id="project-name"></span>${icon('edit', 13)}</button></div><span class="saved-badge" id="save-status">Saved locally</span></div><div class="project-actions"><button class="button quiet" data-action="library">${icon('folder')} Scenarios</button><button class="button quiet" data-action="import">${icon('download')} Import</button><button class="button quiet" data-action="export">${icon('download')} Export</button><button class="button primary" data-action="save">${icon('save')} Save project</button></div></section>
+  <section class="project-bar"><div class="project-heading"><span class="project-icon">${icon('folder', 21)}</span><div><div class="eyebrow">PROJECT / LOCAL WORKSPACE</div><button class="project-name" data-action="settings"><span id="project-name"></span>${icon('edit', 13)}</button></div><span class="saved-badge" id="save-status">Saved locally</span></div><div class="project-actions"><button class="button quiet" data-action="image-map">${icon('map')} Image to 3D</button><button class="button quiet" data-action="library">${icon('folder')} Scenarios</button><button class="button quiet" data-action="import">${icon('download')} Import</button><button class="button quiet" data-action="export">${icon('download')} Export</button><button class="button primary" data-action="save">${icon('save')} Save project</button></div></section>
   <main class="workspace">
     <aside class="sidebar"><div class="sidebar-heading"><h2>Scene explorer</h2><button class="icon-button" data-action="add" aria-label="Add scene entity">${icon('plus')}</button></div><div class="segmented scene-tabs"><button class="active" data-action="scene-tab" data-value="vehicles">Vehicles <span id="vehicle-count"></span></button><button data-action="scene-tab" data-value="objects">Objects <span id="object-count"></span></button></div><div class="search-wrap"><input id="scene-search" aria-label="Search scene" placeholder="Find in scene…"><span>⌕</span></div><div id="scene-list" class="scene-list"></div><div class="sidebar-bottom"><button class="add-entity" data-action="add">${icon('plus')} Add to scene</button><div class="scenario-note">${icon('info', 15)}<p>Authored encounters.<br>Educational flight models.</p></div><button class="weather-summary" data-action="weather"><span class="weather-symbol">${icon('sun', 25)}</span><span><b id="weather-title">Clear conditions</b><small id="weather-line"></small></span>${icon('chevron', 15)}</button></div></aside>
     <section class="center-column">
-      <div class="viewport-wrap"><div id="viewport" class="viewport"></div><div class="viewport-toolbar"><div class="view-switch"><button class="active" data-action="camera" data-value="orbit">${icon('globe', 15)} 3D view</button><button data-action="camera" data-value="overhead">${icon('map', 15)} Top view</button><button data-action="camera" data-value="follow">${icon('eye', 15)} Follow</button></div><div class="view-tools"><button class="icon-button" data-action="undo" id="undo" aria-label="Undo edit">${icon('undo', 16)}</button><button class="icon-button" data-action="redo" id="redo" aria-label="Redo edit">${icon('redo', 16)}</button><span></span><button class="icon-button active" data-action="routes" aria-label="Toggle route lines">${icon('layers', 16)}</button><button class="icon-button active" data-action="labels" aria-label="Toggle vehicle labels">${icon('eye', 16)}</button></div></div>
+      <div class="viewport-wrap"><div id="viewport" class="viewport"></div><div class="viewport-toolbar"><div class="view-switch"><button class="active" data-action="camera" data-value="orbit">${icon('globe', 15)} 3D view</button><button data-action="camera" data-value="overhead">${icon('map', 15)} Top view</button><button data-action="camera" data-value="follow">${icon('eye', 15)} Follow</button></div><div class="view-tools"><button class="icon-button" data-action="reference-map" id="reference-map-toggle" aria-label="Toggle reference image" title="Toggle reference image" hidden>${icon('map', 16)}</button><button class="icon-button" data-action="undo" id="undo" aria-label="Undo edit">${icon('undo', 16)}</button><button class="icon-button" data-action="redo" id="redo" aria-label="Redo edit">${icon('redo', 16)}</button><span></span><button class="icon-button active" data-action="routes" aria-label="Toggle route lines">${icon('layers', 16)}</button><button class="icon-button active" data-action="labels" aria-label="Toggle vehicle labels">${icon('eye', 16)}</button></div></div>
       <div class="scene-caption"><span class="tiny-label">NORTHSTAR TEST RANGE</span><h1>Every scenario starts here.</h1><p id="scene-description"></p></div>
       <div class="viewport-status"><span class="status-pill" id="run-status"><i></i> READY</span><span class="seed-tag" id="seed-label"></span></div><span id="asset-status" class="asset-status" role="status" data-state="loading">Loading scenery…</span>
       <div class="compass"><span>N</span><svg viewBox="0 0 40 40"><path d="m20 5 6 25-6-5-6 5Z" fill="#40575c"/><path d="m20 5 0 20-6 5Z" fill="#91a59c"/></svg></div>
@@ -77,6 +78,11 @@ function commit(change: (draft: ScenarioDocument) => void, message = 'Scenario u
 }
 function choose(id: string) { if (routeEditing && id !== selected) { routeEditing = false; world?.routeMode(false); } selected = id; liveHistory = []; world?.select(id); renderList(); renderInspector(); renderAnalytics(); }
 function renderProject() {
+  $('#reference-map-toggle').hidden = !scenario.referenceMap;
+  $('#reference-map-toggle').classList.toggle('active', Boolean(scenario.referenceMap?.visible));
+  $('#reference-map-toggle').setAttribute('aria-pressed', String(Boolean(scenario.referenceMap?.visible)));
+  $('.scene-caption .tiny-label').textContent = scenario.referenceMap ? 'FICTIONAL COAST · IMAGE STUDY' : 'NORTHSTAR TEST RANGE';
+  $('.scene-caption h1').textContent = scenario.referenceMap ? 'From image to airfield.' : 'Every scenario starts here.';
   $('#project-name').textContent = scenario.name; $('#scene-description').textContent = scenario.description;
   $('#vehicle-count').textContent = String(scenario.vehicles.length); $('#object-count').textContent = String(scenario.objects.length);
   $('#duration').textContent = time(scenario.duration); ($('#scrub') as HTMLInputElement).max = String(scenario.duration);
@@ -170,7 +176,7 @@ function renderAnalytics() {
 }
 
 function modal(title: string, subtitle: string, content: string, wide = false) {
-  const dialog = $('#dialog') as HTMLDialogElement; dialog.classList.toggle('wide', wide);
+  const dialog = $('#dialog') as HTMLDialogElement; dialog.classList.toggle('wide', wide); dialog.classList.remove('image-map-dialog');
   $('#dialog-content').innerHTML = `<div class="dialog-heading"><div><h2>${title}</h2><p>${subtitle}</p></div><button class="icon-button" data-action="close" aria-label="Close dialog">${icon('cross')}</button></div>${content}`;
   if (!dialog.open) dialog.showModal();
 }
@@ -189,6 +195,16 @@ function eventDialog(id?: string) {
   if (!actors.some(([key]) => key === event.actorId)) actors.push([event.actorId, 'Missing participant']);
   modal(existing ? 'Edit scripted event' : 'Author an encounter', 'You choose when the event happens and what its outcome is.', `<form id="event-form" class="dialog-form">${field('Event label', 'label', event.label, 'text', 'required maxlength="160"')}<div class="form-grid">${field('Event time · seconds', 'time', event.time)}${selectField('Outcome / action', 'action', event.action, ['stop', 'expend', 'continue', 'launch', 'delay'].map(action => [action, actionName(action)]))}</div>${selectField('Participant', 'actorId', event.actorId, actors)}${selectField('Supporting participant', 'partnerId', event.partnerId, [['', 'None required'], ...actors])}${field('Additional delay · seconds (delay only)', 'delaySeconds', event.delaySeconds)}<div class="dialog-note">${icon('info', 17)}<p>Encounters are authored game events. Active participants are required for outcomes; launch and delay events require a waiting vehicle.</p></div>${existing ? `<button class="text-button danger" type="button" data-action="event-delete" data-id="${html(existing.id)}">${icon('trash', 14)} Delete event</button>` : ''}${formFooter(existing ? 'Save event' : 'Add event')}</form>`);
   $('#event-form').onsubmit = submit => { submit.preventDefault(); const form = new FormData(submit.currentTarget as HTMLFormElement); try { commit(draft => { const next: ScriptEvent = { id: event.id, label: String(form.get('label')), time: Number(form.get('time')), action: String(form.get('action')) as ScriptEvent['action'], actorId: String(form.get('actorId')), partnerId: String(form.get('partnerId')), delaySeconds: Number(form.get('delaySeconds')) }; const index = draft.events.findIndex(item => item.id === next.id); if (index >= 0) draft.events[index] = next; else draft.events.push(next); }); close(); } catch (error) { formError(error); } };
+}
+function imageMapDialog() {
+  modal('Image to 3D', 'Outline an invented landscape. Give it shape.', '<div id="image-map-editor"></div>', true);
+  $('#dialog').classList.add('image-map-dialog');
+  mountImageMapEditor($('#image-map-editor'), scenario, next => {
+    commit(draft => Object.assign(draft, next), 'Image map applied. Edit objects in the inspector or reopen Image to 3D.');
+    sceneTab = 'objects'; choose(scenario.objects.find(object => object.kind === 'hangar')?.id ?? scenario.objects[0].id);
+    world?.setCamera('orbit'); document.querySelectorAll('[data-action="camera"]').forEach(item => item.classList.toggle('active', (item as HTMLElement).dataset.value === 'orbit'));
+    close();
+  });
 }
 function libraryDialog() {
   modal('Scenario library', 'Start from an authored example, then make it your own.', `<div class="preset-grid">${presets.map(([id, title, description], index) => `<button class="preset-card preset-${id}" data-action="preset" data-value="${id}"><div class="preset-art"><i></i><span>${String(index + 1).padStart(2, '0')}</span>${icon(index === 3 ? 'wind' : index === 2 ? 'bolt' : index === 4 ? 'layers' : 'map', 36)}</div><h3>${title}</h3><p>${description}</p><span class="preset-open">Open scenario ${icon('arrow', 15)}</span></button>`).join('')}<button class="preset-card recorded" data-action="load-record"><div class="preset-art">${icon('replay', 36)}</div><h3>Last saved run</h3><p>Replay the latest recorded session</p><span class="preset-open">Load recording ${icon('arrow', 15)}</span></button></div><p class="library-note">Your current scenario is saved locally. Switching examples can be undone.</p>`, true);
@@ -245,8 +261,10 @@ document.addEventListener('click', async event => {
     if (action === 'reset') { resetRun(); toast('Run reset to the original scenario.'); }
     if (action === 'save') { persist(); capture('save'); }
     if (action === 'replay') capture('replay');
+    if (action === 'image-map') imageMapDialog();
+    if (action === 'reference-map') commit(draft => { if (draft.referenceMap) draft.referenceMap.visible = !draft.referenceMap.visible; }, 'Reference image visibility updated.');
     if (action === 'library') libraryDialog();
-    if (action === 'preset') { const replacement = makeScenario(value); commit(draft => Object.assign(draft, replacement), 'Example loaded. Your previous scene is available with Undo.'); selected = scenario.vehicles[0].id; choose(selected); close(); }
+    if (action === 'preset') { const replacement = makeScenario(value); commit(draft => { delete draft.referenceMap; Object.assign(draft, replacement); }, 'Example loaded. Your previous scene is available with Undo.'); selected = scenario.vehicles[0].id; choose(selected); close(); }
     if (action === 'load-record') { const record = await loadRun(); if (!record) toast('No saved recording yet. Run a scenario, then save the project.'); else { close(); startReplay(record); } }
     if (action === 'add') addDialog();
     if (action === 'add-vehicle') { const id = crypto.randomUUID(); commit(draft => { const count = draft.vehicles.filter(vehicle => vehicle.role === value).length; draft.vehicles.push(makeVehicle(id, value as Vehicle['role'], count)); }); sceneTab = 'vehicles'; choose(id); close(); }
@@ -273,7 +291,7 @@ $('#file-input').addEventListener('change', async event => {
     if (file.size > 40 * 1024 * 1024) throw new Error('Choose a JSON file smaller than 40 MB.');
     const value = JSON.parse(await file.text());
     if (value.frames) { const record = validateRun(value); startReplay(record); }
-    else { const imported = validateScenario(value); commit(draft => Object.assign(draft, imported), 'Scenario imported successfully.'); selected = scenario.vehicles[0].id; choose(selected); }
+    else { const imported = validateScenario(value); commit(draft => { delete draft.referenceMap; Object.assign(draft, imported); }, 'Scenario imported successfully.'); selected = scenario.vehicles[0].id; choose(selected); }
   } catch (error) { toast(`Import rejected. ${error instanceof Error ? error.message : String(error)}`); }
   input.value = '';
 });
@@ -294,7 +312,7 @@ try {
   world.assetsReady.then(failed => {
     $('#asset-status').dataset.state = failed.length ? 'partial' : 'ready';
     $('#asset-status').textContent = failed.length ? 'Some scenery could not load. Reload to retry.' : 'Detailed scenery ready';
-    $('#asset-status').title = failed.length ? `Unavailable: ${failed.join(', ')}` : 'Your jet, hostile drone, two tree models, and grass texture are loaded.';
+    $('#asset-status').title = failed.length ? `Unavailable: ${failed.join(', ')}` : 'Your jet, hostile drone, two tree models, grass texture, and fictional reference image are loaded.';
   });
   world.onSelect = choose;
   world.onMove = (id, position) => { try { commit(draft => { const object = draft.objects.find(item => item.id === id); if (object) object.position = position; }, 'Object moved.'); } catch {} };

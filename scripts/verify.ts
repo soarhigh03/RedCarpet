@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { Simulation, powerAt, temperatureFactor } from '../src/simulation';
 import { makeScenario } from '../src/scenarios';
+import { buildImageScenario, exampleFootprints, objectOutline } from '../src/image-map';
 import { csv, validateRun, validateScenario } from '../src/data';
 import { clone, type ScenarioDocument } from '../src/types';
 
@@ -24,6 +25,48 @@ check('Partial recordings preserve their latest exact state and import successfu
 check('Completed recordings validate and telemetry exports include every vehicle', () => { const record = run(makeScenario()).getRecord(); validateRun(record); const output = csv(record); assert(output.startsWith('time,id,x,y,z,airspeed,groundSpeed,battery,energy,status')); assert(output.includes('"falcon-01"')); assert(output.includes('"intruder-02"')); });
 check('Invalid values and incompatible versions fail before import', () => { for (const mutate of [(scenario: any) => { scenario.schemaVersion = 2; }, (scenario: any) => { scenario.vehicles[0].speed = -1; }, (scenario: any) => { scenario.objects[0].size.x = 0; }, (scenario: any) => { scenario.vehicles[0].route = []; }, (scenario: any) => { scenario.events[0].time = 900; }, (scenario: any) => { scenario.vehicles[1].powerCurve[1].speed = 0; }]) { const scenario = makeScenario(); mutate(scenario); assert.throws(() => validateScenario(scenario)); } });
 check('50 drones and 3 aircraft complete ten simulated minutes with finite telemetry', () => { const simulation = run(makeScenario('stress'), 80); assert.equal(simulation.snapshot.time, 600); assert.equal(simulation.snapshot.units.length, 53); assert.equal(simulation.record.frames.length, 1201); assert.equal(simulation.record.telemetry.length, 601 * 53); assert(simulation.record.telemetry.every(row => [row.x, row.y, row.z, row.energy].every(Number.isFinite))); validateRun(simulation.getRecord()); });
+check('Fictional outlines align with the image and preserve runway orientation', () => {
+  const objects = exampleFootprints(); const runway = objects.find(object => object.kind === 'runway')!;
+  const outline = objectOutline(runway); const scale = 3000 / 1536;
+  assert.equal(runway.rotation, -90);
+  assert.equal(outline.rotation, 90);
+  assert.equal(outline.x, (91 + 1347 / 2) * scale);
+  assert.equal(outline.y, (199 + 67 / 2) * scale);
+  assert.equal(outline.height, 1347 * scale);
+  assert.equal(outline.width, 67 * scale);
+  assert.equal(objects.length, 15);
+});
+check('Image map edits and visibility survive JSON and recorded-run round trips', () => {
+  const scenario = buildImageScenario(makeScenario(), exampleFootprints());
+  const hangar = scenario.objects.find(object => object.kind === 'hangar')!;
+  hangar.label = 'Edited hangar'; hangar.size.y = 82; hangar.rotation = 17; hangar.position.x += 50;
+  scenario.referenceMap!.visible = false;
+  assert.deepEqual(validateScenario(JSON.parse(JSON.stringify(scenario))), scenario);
+  const simulation = new Simulation(scenario); simulation.step(20);
+  assert.deepEqual(validateRun(JSON.parse(JSON.stringify(simulation.getRecord()))).scenario, scenario);
+  for (const referenceMap of [null, { id: 'https://example.com/map.png', visible: true }, { id: 'fictional-coast-v1', visible: 'true' }]) {
+    assert.throws(() => validateScenario({ ...scenario, referenceMap }));
+  }
+  assert.equal(validateScenario(makeScenario()).referenceMap, undefined);
+});
+check('Reopening the image editor preserves authored flights, events, and weather', () => {
+  const original = buildImageScenario(makeScenario(), exampleFootprints());
+  original.vehicles[0].route[0].x += 72; original.weather.windSpeed = 7;
+  original.events = [{ id: 'delay', actorId: original.vehicles[0].id, partnerId: '', time: 0, action: 'delay', delaySeconds: 4, label: 'Authored delay' }];
+  const objects = clone(original.objects); objects[1].size.x += 10;
+  const updated = buildImageScenario(original, objects);
+  assert.deepEqual(updated.vehicles, original.vehicles); assert.deepEqual(updated.events, original.events); assert.deepEqual(updated.weather, original.weather);
+  assert.notDeepEqual(updated.objects, original.objects);
+  assert.throws(() => buildImageScenario(original, []), /runway/);
+});
+check('Fictional coastal takeoff completes with repeatable playback results', () => {
+  const scenario = buildImageScenario(makeScenario(), exampleFootprints());
+  assert.equal(scenario.events.length, 0);
+  const first = run(scenario, 1); const batched = run(scenario, 20);
+  assert.deepEqual(first.snapshot, batched.snapshot);
+  assert(first.snapshot.logs.some(entry => entry.label.includes('takeoff complete')));
+  assert.equal(first.snapshot.units[0].status, 'complete');
+});
 const report = { checkedAt: new Date().toISOString(), node: process.version, platform: process.platform, architecture: process.arch, checks, passed: checks.length, note: 'Simulation and data acceptance checks. Browser rendering FPS is measured separately.' };
 mkdirSync('../outputs', { recursive: true });
 writeFileSync('../outputs/simulation-verification.json', JSON.stringify(report, null, 2));

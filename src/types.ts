@@ -15,6 +15,7 @@ export type Weather = { windSpeed: number; windDirection: number; gusts: number;
 export type ScenarioDocument = {
   schemaVersion: 1; name: string; description: string; seed: number; duration: number;
   objects: MapObject[]; vehicles: Vehicle[]; events: ScriptEvent[]; weather: Weather;
+  referenceMap?: { id: 'fictional-coast-v1'; visible: boolean };
   observations: { noise: number; missRate: number; latency: number };
 };
 export type UnitStatus = 'waiting' | 'rolling' | 'airborne' | 'complete' | 'depleted' | 'stopped' | 'expended' | 'overrun';

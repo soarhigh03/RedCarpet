@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { IMAGE_MAP_PATH } from './image-map';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
@@ -10,6 +11,7 @@ export class SceneAssets {
   private models = new Map<ModelName, THREE.Group>();
   private treeParts = new Map<ModelName, ModelPart[]>();
   grass?: THREE.Texture;
+  referenceMap?: THREE.Texture;
   async load(): Promise<string[]> {
     const draco = new DRACOLoader().setDecoderPath(`${import.meta.env.BASE_URL}draco/`).setWorkerLimit(2);
     const loader = new GLTFLoader().setDRACOLoader(draco);
@@ -25,6 +27,10 @@ export class SceneAssets {
           this.models.set(name, scene);
         } catch { failed.push(name); }
       }),
+      new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}${IMAGE_MAP_PATH}`).then(texture => {
+        texture.colorSpace = THREE.SRGBColorSpace;
+        this.referenceMap = texture;
+      }).catch(() => { failed.push('fictional reference image'); }),
       new THREE.TextureLoader().loadAsync(`${import.meta.env.BASE_URL}textures/grass.png`).then(texture => {
         texture.colorSpace = THREE.SRGBColorSpace;
         texture.wrapS = texture.wrapT = THREE.MirroredRepeatWrapping;

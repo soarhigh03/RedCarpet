@@ -34,6 +34,16 @@ The GLBs have no animation clips or separate rigged mechanisms. The simulation m
 5. Press Play, pause, step by 0.05 s, or change playback speed. Analysis displays telemetry for the selected vehicle. The browser pauses a live run when its tab becomes hidden.
 6. **Save project** stores the scenario in browser local storage and the latest recording in IndexedDB. **Replay** captures the current run and allows scrubbing. Scenarios and recordings can be exported/imported as JSON; CSV contains one telemetry row per vehicle per simulated second. Browser storage is local to the browser profile and site origin.
 
+## Fictional image to 3D
+
+Choose **Image to 3D** in the project toolbar. The bundled coastal airport is newly generated artwork with no reference photograph. Its demo title, **서산공군기지(가상)**, labels a fictional scene; the layout is not a reconstruction of a real installation.
+
+Select an outline in the image or object list, then change its label, type, dimensions, rotation, and illustrative height. **Draw outline** adds a rectangle with two clicks. **Build 3D scene** replaces the current project with an editable coastal scene and one educational takeoff; **Undo** restores the previous project. Reopening the image editor preserves existing flights, routes, weather, and scripted events. The map icon beside Undo toggles the reference image under the 3D geometry.
+
+This is assisted tracing and extrusion, not photogrammetry or automatic height inference. The 3,000 × 2,000 m canvas and all heights are artistic choices. Generated roofs and shadows remain printed on the reference image after an object moves; hide the reference layer for a clean geometry view. The editor uses the bundled fictional concept and does not accept image uploads.
+
+Outlines become ordinary map objects, so the existing inspector, translation handles, save/reload, JSON import/export, and undo/redo work as before. Schema version 1 adds an optional `referenceMap` with an allowlisted built-in image ID and visibility flag. Older scenarios remain supported. The image is in `public/maps/fictional-coast.png`; its exact generation prompt is in `public/maps/generation-prompt.txt`.
+
 ## Models and limits
 
 The scene and vehicle profiles are fictional. The supplied jet artwork does not establish verified aircraft performance data. Flight uses a fixed 0.05 s step, direct waypoint motion, limited climb, and educational wind drift. Energy is the integral of the user-defined airspeed/power curve. Available capacity decreases by 0.8% per degree below 20°C, with a 55% floor; this is an adjustable-model assumption, not a measured battery specification. Depletion ends the modeled flight at its current location.

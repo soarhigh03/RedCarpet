@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { escapeHtml } from './data';
 import { SceneAssets } from './assets';
+import { IMAGE_MAP_DEPTH, IMAGE_MAP_WIDTH } from './image-map';
 import { type MapObject, type ScenarioDocument, type Snapshot, type Vec3, type Vehicle, type UnitState, isActive } from './types';
 
 const colors = { friendly: 0x27c9ab, hostile: 0xf09266, aircraft: 0x8ea6e9 };
@@ -19,6 +20,8 @@ export class AirfieldScene {
   transform: TransformControls;
   private terrain = new THREE.Group();
   private scenery = new THREE.Group();
+  private terrainDetails = new THREE.Group();
+  private referencePlane = new THREE.Mesh(new THREE.PlaneGeometry(IMAGE_MAP_WIDTH, IMAGE_MAP_DEPTH), new THREE.MeshBasicMaterial({ color: 0xffffff }));
   private actors = new THREE.Group();
   private routes = new THREE.Group();
   private marks = new THREE.Group();
@@ -68,8 +71,10 @@ export class AirfieldScene {
     for (let index = 0; index < 600; index++) { rainPositions[index * 3] = Math.sin(index * 13) * 1700; rainPositions[index * 3 + 1] = (index * 53) % 1100; rainPositions[index * 3 + 2] = Math.cos(index * 19) * 1700; }
     rainGeometry.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3)); this.rain = new THREE.Points(rainGeometry, new THREE.PointsMaterial({ color: 0xe0eeff, size: 3, transparent: true, opacity: 0.4 })); this.rain.visible = false; this.scene.add(this.rain);
     this.buildTerrain();
+    this.referencePlane.rotation.x = -Math.PI / 2; this.referencePlane.position.y = 0.15; this.referencePlane.visible = false; this.scene.add(this.referencePlane);
     this.assetsReady = this.assets.load().then(failed => {
       if (this.assets.grass) { this.assets.grass.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy()); this.groundMaterial.map = this.assets.grass; this.groundMaterial.color.set(0xb7bba7); this.groundMaterial.needsUpdate = true; }
+      if (this.assets.referenceMap) { this.assets.referenceMap.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy()); this.referencePlane.material.map = this.assets.referenceMap; this.referencePlane.material.needsUpdate = true; }
       if (this.scenario) this.setScenario(this.scenario);
       return failed;
     });
@@ -81,10 +86,11 @@ export class AirfieldScene {
   private buildTerrain() {
     addBox(this.terrain, 6200, 35, 6000, 0xafb798, 0, -24, 0);
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(6200, 6000), this.groundMaterial); ground.rotation.x = -Math.PI / 2; ground.position.y = -0.1; ground.receiveShadow = true; this.terrain.add(ground);
-    addBox(this.terrain, 26, 1, 2800, 0x8a9184, -1050, 0, 0);
-    addBox(this.terrain, 2600, 1, 24, 0x8a9184, 0, 0, 1150);
+    this.terrain.add(this.terrainDetails);
+    addBox(this.terrainDetails, 26, 1, 2800, 0x8a9184, -1050, 0, 0);
+    addBox(this.terrainDetails, 2600, 1, 24, 0x8a9184, 0, 0, 1150);
     const bounds = [new THREE.Vector3(-1350, 1, -1300), new THREE.Vector3(1150, 1, -1300), new THREE.Vector3(1150, 1, 1100), new THREE.Vector3(-1350, 1, 1100), new THREE.Vector3(-1350, 1, -1300)];
-    const perimeter = new THREE.Line(new THREE.BufferGeometry().setFromPoints(bounds), new THREE.LineDashedMaterial({ color: 0xe9eee0, dashSize: 14, gapSize: 10, transparent: true, opacity: 0.6 })); perimeter.computeLineDistances(); this.terrain.add(perimeter);
+    const perimeter = new THREE.Line(new THREE.BufferGeometry().setFromPoints(bounds), new THREE.LineDashedMaterial({ color: 0xe9eee0, dashSize: 14, gapSize: 10, transparent: true, opacity: 0.6 })); perimeter.computeLineDistances(); this.terrainDetails.add(perimeter);
   }
   private mapObject(item: MapObject) {
     const group = new THREE.Group(); const { x: width, y: height, z: depth } = item.size;
@@ -151,6 +157,8 @@ export class AirfieldScene {
   }
   setScenario(scenario: ScenarioDocument) {
     this.scenario = scenario; this.transform.detach();
+    this.terrainDetails.visible = !scenario.referenceMap;
+    this.referencePlane.visible = Boolean(scenario.referenceMap?.visible && this.assets.referenceMap);
     for (const group of [this.scenery, this.actors, this.routes]) { dispose(group); group.clear(); }
     this.objects.clear(); this.units.clear(); this.labels.clear(); this.labelLayer.replaceChildren();
     scenario.objects.forEach(item => {
