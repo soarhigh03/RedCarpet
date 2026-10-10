@@ -28,7 +28,7 @@ const actionName = (action: string) => ({ stop: 'Intruder stopped', expend: 'Def
 const $ = <ElementType extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<ElementType>(selector)!;
 let scenario = makeScenario();
 let storageWarning = '';
-let appearance: SceneAppearance = 'wireframe';
+let appearance: SceneAppearance = 'holographic';
 try { appearance = appearanceFromStorage(localStorage.getItem('airfield.appearance.v1')); } catch {}
 document.documentElement.dataset.appearance = appearance;
 try { const saved = localStorage.getItem('airfield.scenario.v1'); if (saved) scenario = validateScenario(JSON.parse(saved)); } catch { storageWarning = 'The previous local project could not be loaded. A demo is ready.'; }
@@ -55,7 +55,7 @@ $('#app').innerHTML = `
     <aside class="sidebar"><div class="sidebar-heading"><h2>SCENE ENTITIES</h2><button class="icon-button" data-action="add" aria-label="Add scene entity">${icon('plus')}</button></div><div class="segmented scene-tabs"><button class="active" data-action="scene-tab" data-value="vehicles">Vehicles <span id="vehicle-count"></span></button><button data-action="scene-tab" data-value="objects">Objects <span id="object-count"></span></button></div><div class="search-wrap"><input id="scene-search" aria-label="Search scene" placeholder="Find in scene…"><span>⌕</span></div><div id="scene-list" class="scene-list"></div><div class="sidebar-bottom"><button class="add-entity" data-action="add">${icon('plus')} Add to scene</button><div class="scenario-note">${icon('info', 15)}<p>Authored encounters.<br>Educational flight models.</p></div><button class="weather-summary" data-action="weather"><span class="weather-symbol">${icon('sun', 25)}</span><span><b id="weather-title">Clear conditions</b><small id="weather-line"></small></span>${icon('chevron', 15)}</button></div></aside>
     <section class="center-column">
       <div class="viewport-wrap"><div id="viewport" class="viewport"></div><div class="viewport-toolbar"><div class="view-switch"><button class="active" data-action="camera" data-value="orbit">${icon('globe', 15)} 3D view</button><button data-action="camera" data-value="overhead">${icon('map', 15)} Top view</button><button data-action="camera" data-value="follow">${icon('eye', 15)} Follow</button></div><div class="view-tools"><button class="icon-button" data-action="reference-map" id="reference-map-toggle" aria-label="Toggle reference image" title="Toggle reference image" hidden>${icon('map', 16)}</button><button class="icon-button" data-action="undo" id="undo" aria-label="Undo edit">${icon('undo', 16)}</button><button class="icon-button" data-action="redo" id="redo" aria-label="Redo edit">${icon('redo', 16)}</button><span></span><button class="icon-button active" data-action="routes" aria-label="Toggle route lines">${icon('layers', 16)}</button><button class="icon-button active" data-action="labels" aria-label="Toggle vehicle labels">${icon('eye', 16)}</button></div></div>
-      <div class="render-switch" role="group" aria-label="Scene appearance"><span>RENDER MODE</span><button data-action="appearance" data-value="realistic" aria-pressed="false">${icon('globe', 14)} Realistic</button><button data-action="appearance" data-value="wireframe" aria-pressed="false">${icon('layers', 14)} Wireframe</button></div><div class="viewport-corners" aria-hidden="true"></div><div class="scene-caption"><span class="tiny-label">NORTHSTAR TEST RANGE</span><h1>Every scenario starts here.</h1><p id="scene-description"></p></div>
+      <div class="render-switch" role="group" aria-label="Scene appearance"><span>RENDER MODE</span><button data-action="appearance" data-value="realistic" aria-pressed="false">${icon('globe', 14)} Realistic</button><button data-action="appearance" data-value="holographic" aria-pressed="false">${icon('layers', 14)} Holographic</button></div><div class="viewport-corners" aria-hidden="true"></div><div class="scene-caption"><span class="tiny-label">NORTHSTAR TEST RANGE</span><h1>Every scenario starts here.</h1><p id="scene-description"></p></div>
       <div class="viewport-status"><span class="status-pill" id="run-status"><i></i> READY</span><span class="seed-tag" id="seed-label"></span></div><span id="asset-status" class="asset-status" role="status" data-state="loading">Loading scenery…</span>
       <div class="compass"><span>N</span><svg viewBox="0 0 40 40"><path d="m20 5 6 25-6-5-6 5Z" fill="#40575c"/><path d="m20 5 0 20-6 5Z" fill="#91a59c"/></svg></div>
       <div class="viewport-footer"><span class="map-scale"><i></i> 500 m reference</span><span id="view-hint">Drag to orbit · Scroll to zoom · Click to inspect</span><span id="fps">— FPS</span></div>
@@ -85,7 +85,7 @@ function choose(id: string) { if (routeEditing && id !== selected) { routeEditin
 function renderAppearance() {
   document.documentElement.dataset.appearance = appearance;
   document.querySelectorAll<HTMLElement>('[data-action="appearance"]').forEach(button => { const active = button.dataset.value === appearance; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); });
-  $('#reference-map-toggle').title = appearance === 'wireframe' ? 'Reference image is displayed in Realistic mode' : 'Toggle reference image';
+  $('#reference-map-toggle').title = appearance === 'holographic' ? 'Reference image is displayed in Realistic mode' : 'Toggle reference image';
 }
 function renderProject() {
   renderAppearance();
@@ -255,7 +255,7 @@ document.addEventListener('click', async event => {
   const button = (event.target as HTMLElement).closest<HTMLElement>('[data-action]'); if (!button) return;
   const action = button.dataset.action; const value = button.dataset.value!; const id = button.dataset.id;
   try {
-    if (action === 'appearance') { appearance = value === 'realistic' ? 'realistic' : 'wireframe'; world?.setAppearance(appearance); renderAppearance(); try { localStorage.setItem('airfield.appearance.v1', appearance); } catch {} }
+    if (action === 'appearance') { appearance = value === 'realistic' ? 'realistic' : 'holographic'; world?.setAppearance(appearance); renderAppearance(); try { localStorage.setItem('airfield.appearance.v1', appearance); } catch {} }
     if (action === 'select') choose(id!);
     if (action === 'scene-tab') { sceneTab = value; renderList(); }
     if (action === 'panel') { panel = value; $('#analytics').hidden = panel !== 'analysis'; document.querySelectorAll('[data-action="panel"]').forEach(item => item.classList.toggle('active', (item as HTMLElement).dataset.value === panel)); renderAnalytics(); }

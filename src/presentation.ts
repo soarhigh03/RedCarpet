@@ -1,16 +1,18 @@
 import * as THREE from 'three';
+import { createHolographicSurface } from './holographic-surface';
 
-export type SceneAppearance = 'realistic' | 'wireframe';
-export const appearanceFromStorage = (value: string | null): SceneAppearance => value === 'realistic' ? 'realistic' : 'wireframe';
+export type SceneAppearance = 'realistic' | 'holographic';
+export const appearanceFromStorage = (value: string | null): SceneAppearance => value === 'realistic' ? 'realistic' : 'holographic';
 
 /** Owns only display materials. Geometry, asset textures and simulation state stay untouched. */
-export class WireframeMaterials {
+export class HolographicMaterials {
   private originals = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
-  private surfaces = new Map<string, THREE.MeshBasicMaterial>();
+  private surfaces = new Map<string, THREE.ShaderMaterial>();
   private edgeCache = new Map<THREE.BufferGeometry, THREE.EdgesGeometry>();
   private outlines: { parent: THREE.Mesh; line: THREE.LineSegments; instanced: boolean }[] = [];
-  private edgeMaterial = new THREE.LineBasicMaterial({ color: 0x39acff, transparent: true, opacity: 0.7, depthWrite: false, toneMapped: false });
-  private instancedEdgeMaterial = this.edgeMaterial.clone();
+  private edgeMaterial = new THREE.LineBasicMaterial({ color: 0x55d7ec, transparent: true, opacity: 0.65, depthWrite: false, toneMapped: false });
+  private detailedEdgeMaterial = new THREE.LineBasicMaterial({ color: 0x249bb8, transparent: true, opacity: 0.42, depthWrite: false, toneMapped: false });
+  private instancedEdgeMaterial = this.detailedEdgeMaterial.clone();
 
   constructor() {
     this.instancedEdgeMaterial.onBeforeCompile = shader => {
@@ -19,7 +21,7 @@ export class WireframeMaterials {
     this.instancedEdgeMaterial.customProgramCacheKey = () => 'airfield-instanced-edges-v1';
   }
 
-  private outline(mesh: THREE.Mesh) {
+  private outline(mesh: THREE.Mesh, detailed: boolean) {
     let edges = this.edgeCache.get(mesh.geometry);
     if (!edges) { edges = new THREE.EdgesGeometry(mesh.geometry, 24); this.edgeCache.set(mesh.geometry, edges); }
     let geometry: THREE.BufferGeometry = edges;
@@ -31,8 +33,8 @@ export class WireframeMaterials {
       copies.instanceCount = mesh.count;
       geometry = copies;
     }
-    const line = new THREE.LineSegments(geometry, instanced ? this.instancedEdgeMaterial : this.edgeMaterial);
-    line.name = 'Asset wire contours'; line.raycast = () => {};
+    const line = new THREE.LineSegments(geometry, instanced ? this.instancedEdgeMaterial : detailed ? this.detailedEdgeMaterial : this.edgeMaterial);
+    line.name = 'Holographic contours'; line.raycast = () => {}; line.renderOrder = 1;
     // Instance bounds are already managed by the parent tree LOD groups.
     line.frustumCulled = !instanced;
     mesh.add(line); this.outlines.push({ parent: mesh, line, instanced });
@@ -43,21 +45,26 @@ export class WireframeMaterials {
       if (!(object instanceof THREE.Mesh) || this.originals.has(object)) return;
       this.originals.set(object, object.material);
       const detailed = Boolean(object.userData.sharedAsset);
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox();
+      const bounds = object.geometry.boundingBox!;
+      const size = bounds.getSize(new THREE.Vector3());
+      const flat = !detailed && Math.min(size.x, size.y, size.z) <= 2;
+      let glyph = false;
       const replace = (original: THREE.Material) => {
-        const key = `${detailed}:${original.side}`;
+        // Preserve alpha-only painted runway text, without restoring photographic colors.
+        const map = (original as THREE.MeshBasicMaterial).map;
+        const mask = !detailed && map instanceof THREE.CanvasTexture ? map : undefined;
+        glyph ||= Boolean(mask);
+        const key = `${original.side}:${bounds.min.y}:${size.y}:${flat}:${mask?.uuid ?? ''}`;
         let material = this.surfaces.get(key);
         if (!material) {
-          material = new THREE.MeshBasicMaterial({
-            color: detailed ? 0x075aa3 : 0x55c8ff, wireframe: !detailed,
-            transparent: true, opacity: detailed ? 0.075 : 0.72,
-            depthWrite: false, side: original.side, toneMapped: false,
-          });
+          material = createHolographicSurface(original.side, bounds.min.y, size.y, flat, mask);
           this.surfaces.set(key, material);
         }
         return material;
       };
       object.material = Array.isArray(object.material) ? object.material.map(replace) : replace(object.material);
-      if (detailed) this.outline(object);
+      if (!glyph) this.outline(object, detailed);
     });
   }
 
@@ -68,7 +75,7 @@ export class WireframeMaterials {
     this.originals.clear();
   }
 
-  dispose() { this.restore(); this.surfaces.forEach(material => material.dispose()); this.surfaces.clear(); this.edgeCache.forEach(geometry => geometry.dispose()); this.edgeCache.clear(); this.edgeMaterial.dispose(); this.instancedEdgeMaterial.dispose(); }
+  dispose() { this.restore(); this.surfaces.forEach(material => material.dispose()); this.surfaces.clear(); this.edgeCache.forEach(geometry => geometry.dispose()); this.edgeCache.clear(); this.edgeMaterial.dispose(); this.detailedEdgeMaterial.dispose(); this.instancedEdgeMaterial.dispose(); }
 }
 
 export function createHolographicGround() {
@@ -88,10 +95,10 @@ export function createHolographicGround() {
       }
       void main() {
         float fade = 1.0 - smoothstep(1800.0, 4100.0, length(vGround));
-        float minor = grid(vGround, 100.0) * 0.13;
-        float major = grid(vGround, 500.0) * 0.25;
+        float minor = grid(vGround, 100.0) * 0.07;
+        float major = grid(vGround, 500.0) * 0.18;
         vec3 base = vec3(0.000607, 0.002732, 0.006049);
-        vec3 lines = vec3(0.04, 0.39, 0.70) * (minor + major) * fade;
+        vec3 lines = vec3(0.025, 0.36, 0.40) * (minor + major) * fade;
         gl_FragColor = vec4(base + lines, 1.0);
       }`,
     toneMapped: false,

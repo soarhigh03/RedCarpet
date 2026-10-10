@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { appearanceFromStorage, createHolographicGround, WireframeMaterials } from '../src/presentation';
+import { appearanceFromStorage, createHolographicGround, HolographicMaterials } from '../src/presentation';
 
 const texture = new THREE.Texture();
 const geometry = new THREE.BoxGeometry(10, 20, 30);
@@ -15,7 +15,7 @@ const root = new THREE.Group(); root.add(asset, clone, grouped, instances);
 asset.position.set(22, 40, 90);
 let disposed = 0;
 for (const resource of [texture, geometry, original, second]) resource.addEventListener('dispose', () => disposed++);
-const palette = new WireframeMaterials();
+const palette = new HolographicMaterials();
 const groupedOriginal = grouped.material;
 const instanceMatrix = Array.from(instances.instanceMatrix.array);
 for (let i = 0; i < 30; i++) {
@@ -24,7 +24,14 @@ for (let i = 0; i < 30; i++) {
   assert.equal(asset.material.wireframe, false);
   assert.equal(asset.children.length, 1);
   assert(asset.children[0] instanceof THREE.LineSegments);
-  assert.equal(grouped.material[0].wireframe, true);
+  assert.equal(grouped.material[0].wireframe, false);
+  assert.equal(grouped.children.length, 1);
+  assert.equal((grouped.children[0] as THREE.LineSegments).geometry.getAttribute('position').count, 24);
+  const surface = asset.material as unknown as THREE.ShaderMaterial;
+  assert(surface instanceof THREE.ShaderMaterial);
+  assert.equal(surface.transparent, true);
+  assert.equal(surface.depthWrite, false);
+  assert(surface.uniforms.surfaceOpacity.value >= 0.5);
   const outline = instances.children[0] as THREE.LineSegments<THREE.InstancedBufferGeometry>;
   assert.equal(outline.geometry.instanceCount, 2);
   assert.deepEqual(Array.from(outline.geometry.getAttribute('wireInstanceMatrix').array), instanceMatrix);
@@ -43,8 +50,22 @@ const added = new THREE.Mesh(geometry, second); root.add(added);
 palette.apply(root); assert.notEqual(added.material, second);
 palette.dispose(); assert.equal(added.material, second); assert.equal(disposed, 0);
 console.log('PASS new scene meshes receive the mode and display cleanup does not dispose asset resources');
-assert.equal(appearanceFromStorage(null), 'wireframe');
-assert.equal(appearanceFromStorage('unknown'), 'wireframe');
+assert.equal(appearanceFromStorage(null), 'holographic');
+assert.equal(appearanceFromStorage('unknown'), 'holographic');
 assert.equal(appearanceFromStorage('realistic'), 'realistic');
 const ground = createHolographicGround(); assert.equal(ground.visible, false); assert.equal(ground.rotation.x, -Math.PI / 2);
 console.log('PASS display preference defaults and ground orientation');
+
+assert.equal(appearanceFromStorage('wireframe'), 'holographic');
+assert.equal(appearanceFromStorage('holographic'), 'holographic');
+const glyphTexture = new THREE.CanvasTexture({} as HTMLCanvasElement);
+const glyphOriginal = new THREE.MeshBasicMaterial({ map: glyphTexture, transparent: true });
+const glyph = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), glyphOriginal);
+const road = new THREE.Mesh(new THREE.BoxGeometry(20, 1.5, 200), original);
+const glyphPalette = new HolographicMaterials();
+glyphPalette.apply(glyph, road);
+assert.equal(glyph.children.length, 0, 'painted text must not gain a rectangular outline');
+assert.equal((glyph.material as unknown as THREE.ShaderMaterial).uniforms.glyphMask.value, glyphTexture);
+assert((road.material as unknown as THREE.ShaderMaterial).uniforms.surfaceOpacity.value < 0.5);
+glyphPalette.dispose(); assert.equal(glyph.material, glyphOriginal);
+console.log('PASS filled structural faces, sparse box contours, painted text masks, and legacy preferences');

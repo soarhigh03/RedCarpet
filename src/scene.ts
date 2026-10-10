@@ -3,7 +3,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { createHolographicGround, WireframeMaterials, type SceneAppearance } from './presentation';
+import { createHolographicGround, HolographicMaterials, type SceneAppearance } from './presentation';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { escapeHtml } from './data';
@@ -28,7 +28,7 @@ export class AirfieldScene {
   transform: TransformControls;
   private terrain = new THREE.Group();
   private appearance: SceneAppearance = 'realistic';
-  private wireframeMaterials = new WireframeMaterials();
+  private holographicMaterials = new HolographicMaterials();
   private holographicGround = createHolographicGround();
   private composer?: EffectComposer;
   private scenery = new THREE.Group();
@@ -203,7 +203,8 @@ export class AirfieldScene {
     if (!flightVisual) group.scale.setScalar(1.25); group.rotation.order = 'YXZ'; group.position.set(vehicle.position.x, vehicle.position.y, vehicle.position.z); group.userData.entityId = vehicle.id; group.traverse(child => { child.userData.entityId = vehicle.id; }); return group;
   }
   setScenario(scenario: ScenarioDocument) {
-    this.wireframeMaterials.restore();
+    this.holographicMaterials.dispose();
+    this.holographicMaterials = new HolographicMaterials();
     this.scenario = scenario; this.transform.detach();
     this.buildTerrainDetails(scenario.objects); this.frame(scenario.objects);
     this.terrainDetails.visible = !scenario.referenceMap;
@@ -232,9 +233,9 @@ export class AirfieldScene {
   }
   setAppearance(appearance: SceneAppearance) {
     this.appearance = appearance;
-    const hologram = appearance === 'wireframe';
-    this.wireframeMaterials.restore();
-    if (hologram) this.wireframeMaterials.apply(this.scenery, this.actors);
+    const hologram = appearance === 'holographic';
+    this.holographicMaterials.restore();
+    if (hologram) this.holographicMaterials.apply(this.scenery, this.actors);
     this.terrain.visible = !hologram;
     this.referencePlane.visible = !hologram && Boolean(this.scenario?.referenceMap?.visible && this.assets.referenceMap);
     this.holographicGround.visible = hologram;
@@ -246,7 +247,7 @@ export class AirfieldScene {
     if (hologram && !this.composer) {
       this.composer = new EffectComposer(this.renderer);
       this.composer.addPass(new RenderPass(this.scene, this.camera));
-      this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(this.host.clientWidth, this.host.clientHeight), 0.42, 0.45, 0.58));
+      this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(this.host.clientWidth, this.host.clientHeight), 0.48, 0.5, 0.66));
       this.composer.addPass(new OutputPass());
     }
     this.host.dataset.appearance = appearance;
@@ -305,7 +306,7 @@ export class AirfieldScene {
       if (visible) { occupied.push({ x, y }); label.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`; }
     });
     if (this.rain.visible) { const positions = this.rain.geometry.attributes.position; for (let index = 0; index < positions.count; index++) positions.setY(index, (positions.getY(index) - 8 + 1100) % 1100); positions.needsUpdate = true; }
-    if (this.appearance === 'wireframe' && this.composer) this.composer.render();
+    if (this.appearance === 'holographic' && this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
   }
 }

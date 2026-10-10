@@ -17,9 +17,9 @@ Browser saves belong to each site origin. Export a scenario or recording from th
 
 ## Scene appearance
 
-The workspace, timeline, inspectors, dialogs, analysis view, and hardware report share a dark simulation-console theme. The **Render mode** control below the scene switches between **Realistic** (the supplied models and their original textures) and **Wireframe** (blue structural edges, detailed asset contours, a coordinate grid, and a soft glow). Wireframe is the initial default; the selection is remembered on this browser.
+The workspace, timeline, inspectors, dialogs, analysis view, and hardware report share a dark simulation-console theme. The **Render mode** control below the scene switches between **Realistic** (the supplied models and their original textures) and **Holographic** (translucent cyan faces with height gradients, bright contours, a subtle coordinate grid, and a soft glow). Holographic is the initial default; the selection is remembered on this browser.
 
-Changing appearance does not restart, step, or modify a simulation. Cameras, selected entities, routes, weather, and replay work in both modes. Appearance is a browser display preference, separate from scenario files and recorded results. The fictional reference image is shown only in Realistic mode when its reference toggle is enabled; Wireframe shows the editable scene geometry above a grid. It does not infer geometry from the pixels of the image. Original material and texture references are restored when switching back, including shared and instanced GLB assets.
+Changing appearance does not restart, step, or modify a simulation. Cameras, selected entities, routes, weather, and replay work in both modes. Appearance is a browser display preference, separate from scenario files and recorded results. The fictional reference image is shown only in Realistic mode when its reference toggle is enabled; Holographic shows the editable scene geometry above a grid. It does not infer geometry from the pixels of the image. Original material and texture references are restored when switching back, including shared and instanced GLB assets. Older saved Wireframe preferences open in Holographic mode.
 
 ## Supplied 3D assets
 
