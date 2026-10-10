@@ -1,4 +1,9 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { createHolographicGround, WireframeMaterials, type SceneAppearance } from './presentation';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { escapeHtml } from './data';
@@ -15,10 +20,14 @@ function dispose(root: THREE.Object3D) { root.traverse(object => { const mesh = 
 export class AirfieldScene {
   renderer: THREE.WebGLRenderer;
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(43, 1, 1, 25000);
+  camera = new THREE.PerspectiveCamera(43, 1, 5, 25000);
   controls: OrbitControls;
   transform: TransformControls;
   private terrain = new THREE.Group();
+  private appearance: SceneAppearance = 'realistic';
+  private wireframeMaterials = new WireframeMaterials();
+  private holographicGround = createHolographicGround();
+  private composer?: EffectComposer;
   private scenery = new THREE.Group();
   private terrainDetails = new THREE.Group();
   private referencePlane = new THREE.Mesh(new THREE.PlaneGeometry(IMAGE_MAP_WIDTH, IMAGE_MAP_DEPTH), new THREE.MeshBasicMaterial({ color: 0xffffff }));
@@ -61,8 +70,8 @@ export class AirfieldScene {
     this.scene.add(new THREE.HemisphereLight(0xf4fbff, 0x7a8563, 2.5));
     const sunlight = new THREE.DirectionalLight(0xfff1dc, 3); sunlight.position.set(-900, 1800, 600); sunlight.castShadow = true;
     sunlight.shadow.mapSize.set(2048, 2048); sunlight.shadow.camera.left = -2000; sunlight.shadow.camera.right = 2000; sunlight.shadow.camera.top = 2000; sunlight.shadow.camera.bottom = -2000; sunlight.shadow.camera.far = 6000; sunlight.shadow.normalBias = 2;
-    this.scene.add(sunlight, this.terrain, this.scenery, this.actors, this.routes, this.marks);
-    this.camera.position.set(1650, 1850, 2050); this.controls = new OrbitControls(this.camera, this.renderer.domElement); this.controls.target.set(-130, 0, 0); this.controls.enableDamping = true; this.controls.dampingFactor = 0.08; this.controls.maxPolarAngle = Math.PI / 2.1; this.controls.minDistance = 25; this.controls.maxDistance = 6500;
+    this.scene.add(sunlight, this.holographicGround, this.terrain, this.scenery, this.actors, this.routes, this.marks);
+    this.camera.position.set(1180, 1200, 1450); this.controls = new OrbitControls(this.camera, this.renderer.domElement); this.controls.target.set(-130, 0, 0); this.controls.enableDamping = true; this.controls.dampingFactor = 0.08; this.controls.maxPolarAngle = Math.PI / 2.1; this.controls.minDistance = 25; this.controls.maxDistance = 6500;
     this.transform = new TransformControls(this.camera, this.renderer.domElement); this.transform.setMode('translate'); this.transform.showY = false; this.transform.setSize(0.65); this.transform.setTranslationSnap(5); this.scene.add(this.transform.getHelper());
     this.transform.addEventListener('dragging-changed', event => { this.controls.enabled = !event.value; });
     this.transform.addEventListener('mouseUp', () => { const target = this.transform.object; if (target) this.onMove(this.selected, { x: Math.round(target.position.x), y: Math.round(target.position.y), z: Math.round(target.position.z) }); });
@@ -156,6 +165,7 @@ export class AirfieldScene {
     if (!flightVisual) group.scale.setScalar(1.25); group.rotation.order = 'YXZ'; group.position.set(vehicle.position.x, vehicle.position.y, vehicle.position.z); group.userData.entityId = vehicle.id; group.traverse(child => { child.userData.entityId = vehicle.id; }); return group;
   }
   setScenario(scenario: ScenarioDocument) {
+    this.wireframeMaterials.restore();
     this.scenario = scenario; this.transform.detach();
     this.terrainDetails.visible = !scenario.referenceMap;
     this.referencePlane.visible = Boolean(scenario.referenceMap?.visible && this.assets.referenceMap);
@@ -172,6 +182,7 @@ export class AirfieldScene {
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({ color: colors[vehicle.role], dashSize: 16, gapSize: 12, transparent: true, opacity: 0.38 })); line.computeLineDistances(); line.userData.entityId = vehicle.id; this.routes.add(line);
     });
     const weather = scenario.weather; this.scene.fog = new THREE.FogExp2(weather.rain > 0.3 ? 0xb7c5ce : 0xd9e4e6, 1 / Math.max(800, weather.visibility) * 0.7); this.scene.background = new THREE.Color(weather.rain > 0.3 ? 0xb7c5ce : 0xd9e4e6); this.rain.visible = weather.rain > 0;
+    this.setAppearance(this.appearance);
     this.select(this.selected);
   }
   select(id: string) {
@@ -180,19 +191,40 @@ export class AirfieldScene {
     this.labels.forEach((label, key) => label.classList.toggle('selected', key === id));
     this.routes.children.forEach(route => { const routeMaterial = (route as THREE.Line).material as THREE.LineDashedMaterial; routeMaterial.opacity = route.userData.entityId === id ? 0.95 : 0.23; route.visible = this.routes.children.length <= 12 || route.userData.entityId === id; });
   }
+  setAppearance(appearance: SceneAppearance) {
+    this.appearance = appearance;
+    const hologram = appearance === 'wireframe';
+    this.wireframeMaterials.restore();
+    if (hologram) this.wireframeMaterials.apply(this.scenery, this.actors);
+    this.terrain.visible = !hologram;
+    this.referencePlane.visible = !hologram && Boolean(this.scenario?.referenceMap?.visible && this.assets.referenceMap);
+    this.holographicGround.visible = hologram;
+    this.renderer.shadowMap.enabled = !hologram;
+    const weather = this.scenario?.weather;
+    const background = hologram ? 0x020912 : weather && weather.rain > 0.3 ? 0xb7c5ce : 0xd9e4e6;
+    this.scene.background = new THREE.Color(background);
+    this.scene.fog = new THREE.FogExp2(background, hologram ? Math.max(0.00008, 0.7 / Math.max(800, weather?.visibility ?? 10000)) : 0.7 / Math.max(800, weather?.visibility ?? 10000));
+    if (hologram && !this.composer) {
+      this.composer = new EffectComposer(this.renderer);
+      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(this.host.clientWidth, this.host.clientHeight), 0.42, 0.45, 0.58));
+      this.composer.addPass(new OutputPass());
+    }
+    this.host.dataset.appearance = appearance;
+  }
   setRunning(running: boolean) { this.running = running; if (running) this.transform.detach(); else this.select(this.selected); }
   routeMode(enabled: boolean) { this.editingRoute = enabled; this.controls.enableRotate = !enabled; this.host.classList.toggle('placing-route', enabled); if (enabled) { this.transform.detach(); this.setCamera('overhead'); } else this.select(this.selected); }
   setCamera(mode: string) {
     this.mode = mode;
     this.host.closest('.viewport-wrap')?.classList.toggle('inspect-view', mode === 'follow');
     if (mode === 'overhead') { this.camera.position.set(-130, 3400, 1); this.controls.target.set(-130, 0, 0); }
-    if (mode === 'orbit') { this.camera.position.set(1650, 1850, 2050); this.controls.target.set(-130, 0, 0); }
+    if (mode === 'orbit') { this.camera.position.set(1180, 1200, 1450); this.controls.target.set(-130, 0, 0); }
     this.controls.update();
   }
   update(snapshot: Snapshot) { this.lastSnapshot = snapshot; this.unitStates = snapshot.units; }
   setRoutes(visible: boolean) { this.routes.visible = visible; }
   setLabels(visible: boolean) { this.labelLayer.style.display = visible ? '' : 'none'; }
-  private resize() { const width = this.host.clientWidth; const height = this.host.clientHeight; if (!width || !height) return; this.renderer.setSize(width, height); this.camera.aspect = width / height; this.camera.updateProjectionMatrix(); }
+  private resize() { const width = this.host.clientWidth; const height = this.host.clientHeight; if (!width || !height) return; this.renderer.setSize(width, height); this.composer?.setSize(width, height); this.camera.aspect = width / height; this.camera.updateProjectionMatrix(); }
   private pick(event: PointerEvent) {
     if (Math.hypot(event.clientX - this.down.x, event.clientY - this.down.y) > 5 || this.transform.dragging || this.transform.axis) return;
     const rect = this.renderer.domElement.getBoundingClientRect(); this.pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); this.raycaster.setFromCamera(this.pointer, this.camera);
@@ -233,6 +265,7 @@ export class AirfieldScene {
       if (visible) { occupied.push({ x, y }); label.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`; }
     });
     if (this.rain.visible) { const positions = this.rain.geometry.attributes.position; for (let index = 0; index < positions.count; index++) positions.setY(index, (positions.getY(index) - 8 + 1100) % 1100); positions.needsUpdate = true; }
-    this.renderer.render(this.scene, this.camera);
+    if (this.appearance === 'wireframe' && this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 }

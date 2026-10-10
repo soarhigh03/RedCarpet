@@ -1,4 +1,6 @@
 import './style.css';
+import './console-theme.css';
+import { appearanceFromStorage, type SceneAppearance } from './presentation';
 import { mountImageMapEditor } from './image-map-editor';
 import { AirfieldScene } from './scene';
 import { makeScenario, makeVehicle, presets } from './scenarios';
@@ -26,6 +28,9 @@ const actionName = (action: string) => ({ stop: 'Intruder stopped', expend: 'Def
 const $ = <ElementType extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<ElementType>(selector)!;
 let scenario = makeScenario();
 let storageWarning = '';
+let appearance: SceneAppearance = 'wireframe';
+try { appearance = appearanceFromStorage(localStorage.getItem('airfield.appearance.v1')); } catch {}
+document.documentElement.dataset.appearance = appearance;
 try { const saved = localStorage.getItem('airfield.scenario.v1'); if (saved) scenario = validateScenario(JSON.parse(saved)); } catch { storageWarning = 'The previous local project could not be loaded. A demo is ready.'; }
 let selected = scenario.vehicles[0].id;
 let sceneTab = 'vehicles'; let search = ''; let panel = 'workspace'; let logTab = 'script';
@@ -41,16 +46,16 @@ const send = (command: WorkerCommand) => worker.postMessage(command);
 
 $('#app').innerHTML = `
   <header class="app-header">
-    <a class="brand" href="#" aria-label="Airfield home"><span class="brand-mark"><i></i><i></i><i></i></span><span>AIRFIELD<small>DEFENSE SANDBOX</small></span></a>
+    <a class="brand" href="#" aria-label="Airfield home"><span class="brand-mark"><i></i><i></i><i></i></span><span>AIRFIELD<small>SIMULATION ENVIRONMENT</small></span></a>
     <nav class="main-nav" aria-label="Main navigation"><button class="active" data-action="panel" data-value="workspace">${icon('map')} Workspace</button><button data-action="panel" data-value="analysis">${icon('chart')} Analysis</button><a href="./lab-report.html" target="_blank" rel="noopener">${icon('layers')} Hardware lab <span class="external">↗</span></a></nav>
-    <div class="header-end"><span class="version-tag">FICTIONAL SIMULATION</span><button class="icon-button header-help" data-action="help" aria-label="Help">${icon('info')}</button><span class="avatar">NS</span></div>
+    <div class="header-end"><span class="version-tag">FICTIONAL SIMULATION</span><button class="icon-button header-help" data-action="help" aria-label="Help">${icon('info')}</button><span class="system-indicator"><i></i> LOCAL ENGINE</span></div>
   </header>
-  <section class="project-bar"><div class="project-heading"><span class="project-icon">${icon('folder', 21)}</span><div><div class="eyebrow">PROJECT / LOCAL WORKSPACE</div><button class="project-name" data-action="settings"><span id="project-name"></span>${icon('edit', 13)}</button></div><span class="saved-badge" id="save-status">Saved locally</span></div><div class="project-actions"><button class="button quiet" data-action="image-map">${icon('map')} Image to 3D</button><button class="button quiet" data-action="library">${icon('folder')} Scenarios</button><button class="button quiet" data-action="import">${icon('download')} Import</button><button class="button quiet" data-action="export">${icon('download')} Export</button><button class="button primary" data-action="save">${icon('save')} Save project</button></div></section>
+  <section class="project-bar"><div class="project-heading"><span class="project-icon">${icon('folder', 21)}</span><div><div class="eyebrow">WORKSPACE / SCENARIO EDITOR</div><button class="project-name" data-action="settings"><span id="project-name"></span>${icon('edit', 13)}</button></div><span class="saved-badge" id="save-status">Saved locally</span></div><div class="project-actions"><button class="button quiet" data-action="image-map">${icon('map')} Image to 3D</button><button class="button quiet" data-action="library">${icon('folder')} Scenarios</button><button class="button quiet" data-action="import">${icon('download')} Import</button><button class="button quiet" data-action="export">${icon('download')} Export</button><button class="button primary" data-action="save">${icon('save')} Save project</button></div></section>
   <main class="workspace">
-    <aside class="sidebar"><div class="sidebar-heading"><h2>Scene explorer</h2><button class="icon-button" data-action="add" aria-label="Add scene entity">${icon('plus')}</button></div><div class="segmented scene-tabs"><button class="active" data-action="scene-tab" data-value="vehicles">Vehicles <span id="vehicle-count"></span></button><button data-action="scene-tab" data-value="objects">Objects <span id="object-count"></span></button></div><div class="search-wrap"><input id="scene-search" aria-label="Search scene" placeholder="Find in scene…"><span>⌕</span></div><div id="scene-list" class="scene-list"></div><div class="sidebar-bottom"><button class="add-entity" data-action="add">${icon('plus')} Add to scene</button><div class="scenario-note">${icon('info', 15)}<p>Authored encounters.<br>Educational flight models.</p></div><button class="weather-summary" data-action="weather"><span class="weather-symbol">${icon('sun', 25)}</span><span><b id="weather-title">Clear conditions</b><small id="weather-line"></small></span>${icon('chevron', 15)}</button></div></aside>
+    <aside class="sidebar"><div class="sidebar-heading"><h2>SCENE ENTITIES</h2><button class="icon-button" data-action="add" aria-label="Add scene entity">${icon('plus')}</button></div><div class="segmented scene-tabs"><button class="active" data-action="scene-tab" data-value="vehicles">Vehicles <span id="vehicle-count"></span></button><button data-action="scene-tab" data-value="objects">Objects <span id="object-count"></span></button></div><div class="search-wrap"><input id="scene-search" aria-label="Search scene" placeholder="Find in scene…"><span>⌕</span></div><div id="scene-list" class="scene-list"></div><div class="sidebar-bottom"><button class="add-entity" data-action="add">${icon('plus')} Add to scene</button><div class="scenario-note">${icon('info', 15)}<p>Authored encounters.<br>Educational flight models.</p></div><button class="weather-summary" data-action="weather"><span class="weather-symbol">${icon('sun', 25)}</span><span><b id="weather-title">Clear conditions</b><small id="weather-line"></small></span>${icon('chevron', 15)}</button></div></aside>
     <section class="center-column">
       <div class="viewport-wrap"><div id="viewport" class="viewport"></div><div class="viewport-toolbar"><div class="view-switch"><button class="active" data-action="camera" data-value="orbit">${icon('globe', 15)} 3D view</button><button data-action="camera" data-value="overhead">${icon('map', 15)} Top view</button><button data-action="camera" data-value="follow">${icon('eye', 15)} Follow</button></div><div class="view-tools"><button class="icon-button" data-action="reference-map" id="reference-map-toggle" aria-label="Toggle reference image" title="Toggle reference image" hidden>${icon('map', 16)}</button><button class="icon-button" data-action="undo" id="undo" aria-label="Undo edit">${icon('undo', 16)}</button><button class="icon-button" data-action="redo" id="redo" aria-label="Redo edit">${icon('redo', 16)}</button><span></span><button class="icon-button active" data-action="routes" aria-label="Toggle route lines">${icon('layers', 16)}</button><button class="icon-button active" data-action="labels" aria-label="Toggle vehicle labels">${icon('eye', 16)}</button></div></div>
-      <div class="scene-caption"><span class="tiny-label">NORTHSTAR TEST RANGE</span><h1>Every scenario starts here.</h1><p id="scene-description"></p></div>
+      <div class="render-switch" role="group" aria-label="Scene appearance"><span>RENDER MODE</span><button data-action="appearance" data-value="realistic" aria-pressed="false">${icon('globe', 14)} Realistic</button><button data-action="appearance" data-value="wireframe" aria-pressed="false">${icon('layers', 14)} Wireframe</button></div><div class="viewport-corners" aria-hidden="true"></div><div class="scene-caption"><span class="tiny-label">NORTHSTAR TEST RANGE</span><h1>Every scenario starts here.</h1><p id="scene-description"></p></div>
       <div class="viewport-status"><span class="status-pill" id="run-status"><i></i> READY</span><span class="seed-tag" id="seed-label"></span></div><span id="asset-status" class="asset-status" role="status" data-state="loading">Loading scenery…</span>
       <div class="compass"><span>N</span><svg viewBox="0 0 40 40"><path d="m20 5 6 25-6-5-6 5Z" fill="#40575c"/><path d="m20 5 0 20-6 5Z" fill="#91a59c"/></svg></div>
       <div class="viewport-footer"><span class="map-scale"><i></i> 500 m reference</span><span id="view-hint">Drag to orbit · Scroll to zoom · Click to inspect</span><span id="fps">— FPS</span></div>
@@ -60,7 +65,7 @@ $('#app').innerHTML = `
       <div class="scrubber"><input id="scrub" type="range" min="0" max="180" value="0" step="0.05" aria-label="Replay timeline" disabled><div class="time-ruler" id="time-ruler"></div><div class="event-markers" id="event-markers"></div></div>
       <div class="timeline-heading"><div class="timeline-tabs"><button class="active" data-action="log-tab" data-value="script">Scripted events <span id="event-count"></span></button><button data-action="log-tab" data-value="log">Flight log <span id="log-count">0</span></button></div><button class="text-button" data-action="event-add">${icon('plus', 14)} Add event</button></div><div id="event-list" class="event-list"></div></section>
     </section>
-    <aside class="inspector"><div class="inspector-heading"><span>INSPECTOR</span>${icon('settings', 16)}</div><div id="inspector-content"></div></aside>
+    <aside class="inspector"><div class="inspector-heading"><span>ENTITY INSPECTOR</span>${icon('settings', 16)}</div><div id="inspector-content"></div></aside>
   </main>
   <footer class="app-footer"><span><i class="connection-dot"></i> Local simulation <span class="footer-divider">/</span> <span id="entity-summary"></span></span><span>Scenario seed <b id="footer-seed"></b><span class="footer-divider">/</span> v${SIMULATOR_VERSION}</span></footer>
   <dialog id="dialog"><div id="dialog-content"></div></dialog><div class="toast" id="toast" role="status" aria-live="polite"></div><input type="file" id="file-input" accept="application/json,.json" hidden>
@@ -77,12 +82,18 @@ function commit(change: (draft: ScenarioDocument) => void, message = 'Scenario u
   } catch (error) { toast(error instanceof Error ? error.message : String(error)); throw error; }
 }
 function choose(id: string) { if (routeEditing && id !== selected) { routeEditing = false; world?.routeMode(false); } selected = id; liveHistory = []; world?.select(id); renderList(); renderInspector(); renderAnalytics(); }
+function renderAppearance() {
+  document.documentElement.dataset.appearance = appearance;
+  document.querySelectorAll<HTMLElement>('[data-action="appearance"]').forEach(button => { const active = button.dataset.value === appearance; button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active)); });
+  $('#reference-map-toggle').title = appearance === 'wireframe' ? 'Reference image is displayed in Realistic mode' : 'Toggle reference image';
+}
 function renderProject() {
+  renderAppearance();
   $('#reference-map-toggle').hidden = !scenario.referenceMap;
   $('#reference-map-toggle').classList.toggle('active', Boolean(scenario.referenceMap?.visible));
   $('#reference-map-toggle').setAttribute('aria-pressed', String(Boolean(scenario.referenceMap?.visible)));
   $('.scene-caption .tiny-label').textContent = scenario.referenceMap ? 'FICTIONAL COAST · IMAGE STUDY' : 'NORTHSTAR TEST RANGE';
-  $('.scene-caption h1').textContent = scenario.referenceMap ? 'From image to airfield.' : 'Every scenario starts here.';
+  $('.scene-caption h1').textContent = scenario.referenceMap ? 'COASTAL ENVIRONMENT' : 'AIRFIELD SIMULATION';
   $('#project-name').textContent = scenario.name; $('#scene-description').textContent = scenario.description;
   $('#vehicle-count').textContent = String(scenario.vehicles.length); $('#object-count').textContent = String(scenario.objects.length);
   $('#duration').textContent = time(scenario.duration); ($('#scrub') as HTMLInputElement).max = String(scenario.duration);
@@ -167,12 +178,12 @@ function updateSnapshot(state: Snapshot, isPlaying: boolean) {
   if (unit && (!liveHistory.length || state.time - liveHistory[liveHistory.length - 1].time >= 0.95)) liveHistory.push({ time: state.time, battery: unit.battery, speed: unit.groundSpeed, altitude: unit.position.y });
   updateMetrics(state); if (previousLogCount !== state.logs.length || state.time === 0) renderEvents(); if (panel === 'analysis') renderAnalytics();
 }
-function chart(values: number[], color: string, maximum: number) { const points = values.length ? values.map((value, index) => `${index / Math.max(1, values.length - 1) * 500},${95 - value / Math.max(1, maximum) * 85}`).join(' ') : '0,95 500,95'; return `<svg class="chart-svg" viewBox="0 0 500 110" preserveAspectRatio="none" aria-label="Time series chart"><path d="M0 10H500M0 52H500M0 95H500" stroke="#e7edf0" fill="none"/><polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg>`; }
+function chart(values: number[], color: string, maximum: number) { const points = values.length ? values.map((value, index) => `${index / Math.max(1, values.length - 1) * 500},${95 - value / Math.max(1, maximum) * 85}`).join(' ') : '0,95 500,95'; return `<svg class="chart-svg" viewBox="0 0 500 110" preserveAspectRatio="none" aria-label="Time series chart"><path d="M0 10H500M0 52H500M0 95H500" stroke="#1b3349" fill="none"/><polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke"/></svg>`; }
 function renderAnalytics() {
   if (panel !== 'analysis') return;
   const unit = snapshot?.units.find(item => item.id === selected); const name = scenario.vehicles.find(item => item.id === selected)?.label ?? 'Select a vehicle';
   const history = replayRecord ? replayRecord.telemetry.filter(row => row.id === selected && row.time <= replayTime).map(row => ({ time: row.time, battery: row.battery, speed: row.groundSpeed, altitude: row.y })) : liveHistory;
-  $('#analytics').innerHTML = `<div class="analysis-heading"><div class="eyebrow">FLIGHT ANALYSIS</div><h1>The story behind the scenario.</h1><p>Inspect motion, energy, and authored outcomes as your run unfolds.</p></div><div class="stat-grid"><div><span>ACTIVE VEHICLES</span><strong>${snapshot?.units.filter(unit => isActive(unit.status)).length ?? 0}<small> / ${scenario.vehicles.length}</small></strong></div><div><span>OBSERVATIONS</span><strong>${snapshot?.observationCount ?? 0}</strong></div><div><span>RESOLVED EVENTS</span><strong>${snapshot?.logs.filter(entry => entry.kind === 'resolved').length ?? 0}<small> / ${scenario.events.length}</small></strong></div><div><span>SKIPPED EVENTS</span><strong>${snapshot?.logs.filter(entry => entry.kind === 'skipped').length ?? 0}</strong></div></div><div class="analysis-subhead"><h3>${html(name)}</h3><button class="text-button" data-action="csv">${icon('download', 15)} Export telemetry</button></div><div class="chart-card"><div><span>Remaining energy</span><b>${unit?.battery.toFixed(1) ?? '100'}<small>%</small></b></div>${chart(history.map(row => row.battery), '#20a58e', 100)}<footer><span>00:00</span><span>Simulation time · ${time(snapshot?.time ?? 0)}</span></footer></div><div class="chart-card"><div><span>Ground speed</span><b>${unit?.groundSpeed.toFixed(1) ?? '0'}<small> m/s</small></b></div>${chart(history.map(row => row.speed), '#7894d7', Math.max(50, ...history.map(row => row.speed)))}<footer><span>00:00</span><span>Simulation time · ${time(snapshot?.time ?? 0)}</span></footer></div><p class="analysis-footnote">Synthetic observations · ${scenario.observations.noise} m noise · ${(scenario.observations.missRate * 100).toFixed(0)}% base miss rate · ${scenario.observations.latency} s delay</p>`;
+  $('#analytics').innerHTML = `<div class="analysis-heading"><div class="eyebrow">FLIGHT ANALYSIS</div><h1>The story behind the scenario.</h1><p>Inspect motion, energy, and authored outcomes as your run unfolds.</p></div><div class="stat-grid"><div><span>ACTIVE VEHICLES</span><strong>${snapshot?.units.filter(unit => isActive(unit.status)).length ?? 0}<small> / ${scenario.vehicles.length}</small></strong></div><div><span>OBSERVATIONS</span><strong>${snapshot?.observationCount ?? 0}</strong></div><div><span>RESOLVED EVENTS</span><strong>${snapshot?.logs.filter(entry => entry.kind === 'resolved').length ?? 0}<small> / ${scenario.events.length}</small></strong></div><div><span>SKIPPED EVENTS</span><strong>${snapshot?.logs.filter(entry => entry.kind === 'skipped').length ?? 0}</strong></div></div><div class="analysis-subhead"><h3>${html(name)}</h3><button class="text-button" data-action="csv">${icon('download', 15)} Export telemetry</button></div><div class="chart-card"><div><span>Remaining energy</span><b>${unit?.battery.toFixed(1) ?? '100'}<small>%</small></b></div>${chart(history.map(row => row.battery), '#42c8ff', 100)}<footer><span>00:00</span><span>Simulation time · ${time(snapshot?.time ?? 0)}</span></footer></div><div class="chart-card"><div><span>Ground speed</span><b>${unit?.groundSpeed.toFixed(1) ?? '0'}<small> m/s</small></b></div>${chart(history.map(row => row.speed), '#929dff', Math.max(50, ...history.map(row => row.speed)))}<footer><span>00:00</span><span>Simulation time · ${time(snapshot?.time ?? 0)}</span></footer></div><p class="analysis-footnote">Synthetic observations · ${scenario.observations.noise} m noise · ${(scenario.observations.missRate * 100).toFixed(0)}% base miss rate · ${scenario.observations.latency} s delay</p>`;
 }
 
 function modal(title: string, subtitle: string, content: string, wide = false) {
@@ -244,6 +255,7 @@ document.addEventListener('click', async event => {
   const button = (event.target as HTMLElement).closest<HTMLElement>('[data-action]'); if (!button) return;
   const action = button.dataset.action; const value = button.dataset.value!; const id = button.dataset.id;
   try {
+    if (action === 'appearance') { appearance = value === 'realistic' ? 'realistic' : 'wireframe'; world?.setAppearance(appearance); renderAppearance(); try { localStorage.setItem('airfield.appearance.v1', appearance); } catch {} }
     if (action === 'select') choose(id!);
     if (action === 'scene-tab') { sceneTab = value; renderList(); }
     if (action === 'panel') { panel = value; $('#analytics').hidden = panel !== 'analysis'; document.querySelectorAll('[data-action="panel"]').forEach(item => item.classList.toggle('active', (item as HTMLElement).dataset.value === panel)); renderAnalytics(); }
@@ -308,7 +320,7 @@ worker.onmessage = (event: MessageEvent<WorkerMessage>) => {
 };
 worker.onerror = () => toast('The simulation worker could not start. Reload the page to try again.');
 try {
-  world = new AirfieldScene($('#viewport')); world.setScenario(scenario); world.select(selected);
+  world = new AirfieldScene($('#viewport')); world.setScenario(scenario); world.select(selected); world.setAppearance(appearance);
   world.assetsReady.then(failed => {
     $('#asset-status').dataset.state = failed.length ? 'partial' : 'ready';
     $('#asset-status').textContent = failed.length ? 'Some scenery could not load. Reload to retry.' : 'Detailed scenery ready';

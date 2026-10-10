@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
+<meta name="color-scheme" content="dark light">
 <title>Indoor sensing &amp; FPGA lab — Airfield Defense Sandbox</title>
 <style>
 :root{--ink:#173332;--muted:#5e7371;--teal:#087c72;--line:#d7e5e0;--paper:#f1f5f2;--soft:#eaf6f0}
@@ -42,6 +42,13 @@ li{margin:8px 0}
 footer{border-top:1px solid var(--line);margin-top:36px;padding-top:18px;color:var(--muted);font-size:12px}
 @media(max-width:760px){main{margin:0;padding:24px 18px;border:0;border-radius:0}.cards,.split{grid-template-columns:1fr}.specs{min-width:720px}th,td{padding:11px}}
 @media print{@page{size:A4;margin:14mm}body{background:#fff;font-size:10pt}main{border:0;margin:0;padding:0;max-width:none}header{padding-bottom:14px;margin-bottom:16px}h1{font-size:28pt}h2{font-size:16pt;margin-top:22px}h3{font-size:11pt}.lead{font-size:12pt}.cards{gap:8px}.card{padding:12px}.number{font-size:23pt}.table-wrap{overflow:visible}.specs{min-width:0}table{font-size:8pt}th,td{padding:8px}tr,.card,.callout{break-inside:avoid}thead{display:table-header-group}button{display:none}a{color:#087c72}.split{gap:16px}.source,.small{font-size:8pt}footer{font-size:8pt}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+@media screen {
+:root{--ink:#d1e4f5;--muted:#86a8c2;--teal:#69cfff;--line:#2a435a;--paper:#070e18;--soft:#14283b;color-scheme:dark}
+body{background-color:var(--paper);background-image:linear-gradient(#2b5c7920 1px,transparent 1px),linear-gradient(90deg,#2b5c7920 1px,transparent 1px);background-size:48px 48px}
+main{background:#0b1725ed;border-color:#36566d;border-radius:4px;box-shadow:0 12px 80px #0007}
+.card,.table-wrap,.badge{border-radius:3px}th{background:#12283b}button{background:#205475;color:#dcf4ff;border:1px solid #488cab;border-radius:3px}
+h1,h2{color:#daedfb}.callout{border-color:#67c9f7;border-radius:0;background:#112b3e}
+}
 </style>
 </head>
 <body>

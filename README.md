@@ -15,6 +15,12 @@ Use Node.js 22. Run `npm ci`, then `npm run dev`. Production output is generated
 
 Browser saves belong to each site origin. Export a scenario or recording from the old site, then import it on the Vercel site to transfer your work. The optional `.openai/hosting.json` in the original working checkout belongs to the earlier Sites deployment and is not needed by Vercel.
 
+## Scene appearance
+
+The workspace, timeline, inspectors, dialogs, analysis view, and hardware report share a dark simulation-console theme. The **Render mode** control below the scene switches between **Realistic** (the supplied models and their original textures) and **Wireframe** (blue structural edges, detailed asset contours, a coordinate grid, and a soft glow). Wireframe is the initial default; the selection is remembered on this browser.
+
+Changing appearance does not restart, step, or modify a simulation. Cameras, selected entities, routes, weather, and replay work in both modes. Appearance is a browser display preference, separate from scenario files and recorded results. The fictional reference image is shown only in Realistic mode when its reference toggle is enabled; Wireframe shows the editable scene geometry above a grid. It does not infer geometry from the pixels of the image. Original material and texture references are restored when switching back, including shared and instanced GLB assets.
+
 ## Supplied 3D assets
 
 The jet uses the supplied Meshy military-plane GLB, and each tree grove mixes both supplied Meshy tree models. Browser copies are in `public/models/`, with lower-detail tree meshes for distant views. Trees share geometry and materials and are drawn in instances. All mesh textures and the Draco decoder are served from this project; no external model service is needed. The source files in Downloads are untouched.
