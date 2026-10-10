@@ -9,16 +9,16 @@
 <style>
 :root{--ink:#173332;--muted:#5e7371;--teal:#087c72;--line:#d7e5e0;--paper:#f1f5f2;--soft:#eaf6f0}
 *{box-sizing:border-box}
-body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 var(--font-ui)}
+body{margin:0;background:var(--paper);color:var(--ink);font:18px/1.6 var(--font-ui)}
 main{max-width:1200px;margin:36px auto;padding:48px;background:#fff;border:1px solid var(--line);border-radius:20px}
 header{border-bottom:1px solid var(--line);padding-bottom:30px;margin-bottom:32px}
-.eyebrow{color:var(--teal);font-size:12px;letter-spacing:-0.02em;font-weight:750;text-transform:uppercase}
+.eyebrow{color:var(--teal);font-size:15px;letter-spacing:-0.02em;font-weight:750;text-transform:uppercase}
 h1{font-size:clamp(30px,4vw,49px);line-height:1.08;letter-spacing:-0.02em;margin:14px 0 18px}
 h2{font-size:23px;letter-spacing:-0.02em;margin:34px 0 12px}
-h3{font-size:16px;margin:0 0 7px}
+h3{font-size:19px;margin:0 0 7px}
 p{margin:10px 0}
-.lead{font-size:18px;max-width:870px;color:var(--muted)}
-.meta{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:20px}
+.lead{font-size:21px;max-width:870px;color:var(--muted)}
+.meta{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:15px;color:var(--muted);margin-top:20px}
 .badge{border:1px solid var(--line);padding:5px 10px;border-radius:100px}
 button{background:var(--teal);border:0;color:#fff;border-radius:8px;padding:9px 15px;font:inherit;cursor:pointer}
 button:focus-visible,a:focus-visible{outline:3px solid #ecad47;outline-offset:3px}
@@ -26,21 +26,21 @@ a{color:var(--teal);text-underline-offset:3px;overflow-wrap:anywhere}
 .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:24px 0}
 .card{padding:21px;background:var(--soft);border:1px solid var(--line);border-radius:12px}
 .number{font-size:31px;letter-spacing:-0.02em;font-weight:750;color:var(--teal)}
-.small{font-size:12px;color:var(--muted)}
+.small{font-size:15px;color:var(--muted)}
 .callout{border-left:4px solid var(--teal);background:var(--soft);padding:17px 22px;border-radius:0 10px 10px 0;margin:20px 0}
 .table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:11px;margin:16px 0}
-table{border-collapse:collapse;width:100%;font-size:13px}
-th{background:#edf4f0;font-size:11px;text-transform:uppercase;letter-spacing:-0.02em;color:var(--muted);text-align:left}
+table{border-collapse:collapse;width:100%;font-size:16px}
+th{background:#edf4f0;font-size:14px;text-transform:uppercase;letter-spacing:-0.02em;color:var(--muted);text-align:left}
 th,td{padding:15px;vertical-align:top;border-bottom:1px solid var(--line)}
 tr:last-child td{border-bottom:0}
 td:first-child{font-weight:650}
 .num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 tfoot{background:var(--soft);font-weight:750}
-.source{display:block;font-size:11px;margin-top:8px;font-weight:450}
+.source{display:block;font-size:14px;margin-top:8px;font-weight:450}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 ol,ul{padding-left:22px}
 li{margin:8px 0}
-footer{border-top:1px solid var(--line);margin-top:36px;padding-top:18px;color:var(--muted);font-size:12px}
+footer{border-top:1px solid var(--line);margin-top:36px;padding-top:18px;color:var(--muted);font-size:15px}
 @media(max-width:760px){main{margin:0;padding:24px 18px;border:0;border-radius:0}.cards,.split{grid-template-columns:1fr}.specs{min-width:720px}th,td{padding:11px}}
 @media print{@page{size:A4;margin:14mm}body{background:#fff;font-size:10pt}main{border:0;margin:0;padding:0;max-width:none}header{padding-bottom:14px;margin-bottom:16px}h1{font-size:28pt}h2{font-size:16pt;margin-top:22px}h3{font-size:11pt}.lead{font-size:12pt}.cards{gap:8px}.card{padding:12px}.number{font-size:23pt}.table-wrap{overflow:visible}.specs{min-width:0}table{font-size:8pt}th,td{padding:8px}tr,.card,.callout{break-inside:avoid}thead{display:table-header-group}button{display:none}a{color:#087c72}.split{gap:16px}.source,.small{font-size:8pt}footer{font-size:8pt}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 @media screen {
