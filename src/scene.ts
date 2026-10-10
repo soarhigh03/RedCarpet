@@ -132,7 +132,7 @@ export class AirfieldScene {
   }
   private vehicleModel(vehicle: Vehicle) {
     const group = new THREE.Group(); const tint = colors[vehicle.role];
-    const flightVisual = vehicle.kind === 'jet' ? this.assets.jet() : undefined;
+    const flightVisual = vehicle.kind === 'jet' ? this.assets.jet() : vehicle.role === 'hostile' && vehicle.kind === 'fixed-wing' ? this.assets.hostileDrone() : undefined;
     if (flightVisual) { group.add(flightVisual); group.userData.flightVisual = flightVisual; }
     else if (vehicle.kind === 'multirotor') {
       addBox(group, 12, 5, 16, 0x274c50, 0, 2, 0);

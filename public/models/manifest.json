@@ -104,6 +104,48 @@
       ],
       "extensions": [],
       "geometryCheck": "decoded; finite positions and valid indices"
+    },
+    {
+      "file": "Meshy_AI_drone_1010190247_texture.glb",
+      "bytes": 11282000,
+      "triangles": 220555,
+      "vertices": 133356,
+      "primitives": 1,
+      "animations": 0,
+      "bounds": {
+        "min": [
+          -0.9503340125083923,
+          -0.22812508046627045,
+          -0.8761991262435913
+        ],
+        "max": [
+          0.9487950205802917,
+          0.22640401124954224,
+          0.8747361302375793
+        ]
+      },
+      "textures": [
+        {
+          "format": "jpeg",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 2935766
+        },
+        {
+          "format": "jpeg",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 1363705
+        },
+        {
+          "format": "jpeg",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 66166
+        }
+      ],
+      "extensions": [],
+      "geometryCheck": "decoded; finite positions and valid indices"
     }
   ],
   "runtime": [
@@ -299,6 +341,47 @@
         "KHR_draco_mesh_compression"
       ],
       "geometryCheck": "decoded; finite positions and valid indices"
+    },
+    {
+      "file": "hostile-drone.glb",
+      "bytes": 1297428,
+      "triangles": 39693,
+      "vertices": 36053,
+      "primitives": 1,
+      "animations": 0,
+      "bounds": {
+        "min": [
+          -0.9503340125083923,
+          -0.22798506915569305,
+          -0.8760881423950195
+        ],
+        "max": [
+          0.9487789273262024,
+          0.22618843615055084,
+          0.8747633695602417
+        ]
+      },
+      "textures": [
+        {
+          "format": "webp",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 764942
+        },
+        {
+          "format": "webp",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 259020
+        }
+      ],
+      "extensions": [
+        "EXT_texture_webp",
+        "KHR_draco_mesh_compression"
+      ],
+      "geometryCheck": "decoded; finite positions and valid indices",
+      "source": "Meshy_AI_drone_1010190247_texture.glb",
+      "usage": "Visual artwork for fictional hostile drones; no vehicle performance specification implied."
     }
   ],
   "processing": [
@@ -307,6 +390,8 @@
     "Tree meshes use attribute-aware permissive simplification. Distant Tree A retains extra triangles to preserve canopy. Distant Tree B locks lower-trunk vertices to preserve ground contact.",
     "Tree A has generated MikkTSpace tangents for its existing normal map.",
     "All outputs decoded successfully with finite positions and valid indices; glTF CLI validation reports no errors or warnings. Validator does not inspect the compressed Draco payload.",
-    "No animation clips exist in the supplied files; aircraft motion is controlled by the simulator."
-  ]
+    "No animation clips exist in the supplied files; aircraft motion is controlled by the simulator.",
+    "Hostile drone artwork: 2K WebP color and metallic/roughness maps, Draco geometry; constant flat source normal map removed. Identity root transform and source orientation retained. No simulation parameters are derived from the artwork."
+  ],
+  "updatedAt": "2026-10-10T19:12:00.485Z"
 }

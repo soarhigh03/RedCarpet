@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
-export const MODEL_FILES = ['military-jet', 'tree-a', 'tree-b', 'tree-a-lod', 'tree-b-lod'] as const;
+export const MODEL_FILES = ['military-jet', 'hostile-drone', 'tree-a', 'tree-b', 'tree-a-lod', 'tree-b-lod'] as const;
 type ModelName = typeof MODEL_FILES[number];
 type ModelPart = { geometry: THREE.BufferGeometry; material: THREE.Material | THREE.Material[]; matrix: THREE.Matrix4 };
 
@@ -44,6 +44,19 @@ export class SceneAssets {
     const scale = 64 / bounds.getSize(new THREE.Vector3()).z;
     const mount = new THREE.Group();
     model.position.set(-center.x * scale, -bounds.min.y * scale - 3.25, -center.z * scale);
+    model.scale.setScalar(scale); mount.add(model);
+    return mount;
+  }
+  hostileDrone(): THREE.Group | undefined {
+    const template = this.models.get('hostile-drone'); if (!template) return;
+    const model = template.clone(true);
+    // The supplied mesh faces -X; vehicle motion uses local -Z as forward.
+    model.rotation.y = -Math.PI / 2;
+    model.updateMatrixWorld(true);
+    const bounds = new THREE.Box3().setFromObject(model); const center = bounds.getCenter(new THREE.Vector3());
+    const size = bounds.getSize(new THREE.Vector3()); const scale = 58 / Math.max(size.x, size.z);
+    const mount = new THREE.Group();
+    model.position.copy(center).multiplyScalar(-scale);
     model.scale.setScalar(scale); mount.add(model);
     return mount;
   }

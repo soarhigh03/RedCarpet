@@ -10,6 +10,8 @@ Use Node.js 20.19 or later. Run `npm install`, then `npm run dev`. Production ou
 
 The jet uses the supplied Meshy military-plane GLB, and each tree grove mixes both supplied Meshy tree models. Browser copies are in `public/models/`, with lower-detail tree meshes for distant views. Trees share geometry and materials and are drawn in instances. All mesh textures and the Draco decoder are served from this project; no external model service is needed. The source files in Downloads are untouched.
 
+Hostile fixed-wing drones use the supplied `Meshy_AI_drone_1010190247_texture.glb`, presented as a Shahed-style model. This applies to existing, imported, and newly added hostile fixed-wing vehicles. Friendly drones retain their own appearance. The artwork changes the visual model only; routes, battery curves, flight settings, and scripted outcomes remain fictional and editable. The optimized browser copy is `public/models/hostile-drone.glb`.
+
 The supplied grass image is tiled on the ground plane. Runways, taxiways, aprons, and roads remain paved surfaces above it, including after map edits. Use **Follow** on an aircraft or a tree grove for a closer view, or orbit and zoom with the mouse.
 
 The GLBs have no animation clips or separate rigged mechanisms. The simulation moves and pitches the whole jet mesh through its takeoff and climb. Landing gear and control surfaces are part of the static supplied geometry. Display scale is for readability, not a claim about the real aircraft's dimensions.

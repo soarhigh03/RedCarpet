@@ -20,6 +20,7 @@ const icons: Record<string, string> = {
 const icon = (name: string, size = 18) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] ?? icons.info}</svg>`;
 const time = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, '0')}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
 const roleName = (role: string) => ({ friendly: 'Friendly', hostile: 'Intruder', aircraft: 'Aircraft' }[role] ?? role);
+const isShahedVisual = (vehicle: Vehicle) => vehicle.role === 'hostile' && vehicle.kind === 'fixed-wing';
 const actionName = (action: string) => ({ stop: 'Intruder stopped', expend: 'Defender expended', continue: 'Intruder continues', launch: 'Launch vehicle', delay: 'Delay departure' }[action] ?? action);
 const $ = <ElementType extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<ElementType>(selector)!;
 let scenario = makeScenario();
@@ -93,7 +94,7 @@ function renderList() {
   if (sceneTab === 'vehicles') {
     $('#scene-list').innerHTML = (['aircraft', 'friendly', 'hostile'] as const).map(role => {
       const entities = scenario.vehicles.filter(vehicle => vehicle.role === role && vehicle.label.toLowerCase().includes(search));
-      return `<div class="list-group-title">${roleName(role)} <span>${entities.length}</span></div>${entities.map(vehicle => `<button class="entity-item ${selected === vehicle.id ? 'selected' : ''}" data-action="select" data-id="${html(vehicle.id)}"><span class="entity-icon ${vehicle.role}">${icon(vehicle.kind === 'jet' ? 'jet' : 'drone', 20)}</span><span class="entity-text"><b>${html(vehicle.label)}</b><small>${vehicle.kind === 'jet' ? 'Military jet · Conventional' : vehicle.kind === 'multirotor' ? 'Multirotor · Electric' : 'Fixed-wing · Electric'}</small></span><i class="entity-status" data-unit-status="${html(vehicle.id)}"></i></button>`).join('')}`;
+      return `<div class="list-group-title">${roleName(role)} <span>${entities.length}</span></div>${entities.map(vehicle => `<button class="entity-item ${selected === vehicle.id ? 'selected' : ''}" data-action="select" data-id="${html(vehicle.id)}"><span class="entity-icon ${vehicle.role}">${icon(vehicle.kind === 'jet' ? 'jet' : 'drone', 20)}</span><span class="entity-text"><b>${html(vehicle.label)}</b><small>${vehicle.kind === 'jet' ? 'Military jet · Conventional' : isShahedVisual(vehicle) ? 'Shahed-style · Fixed-wing' : vehicle.kind === 'multirotor' ? 'Multirotor · Electric' : 'Fixed-wing · Electric'}</small></span><i class="entity-status" data-unit-status="${html(vehicle.id)}"></i></button>`).join('')}`;
     }).join('');
   } else {
     $('#scene-list').innerHTML = `<div class="list-group-title">Airfield objects <span>${scenario.objects.length}</span></div>` + scenario.objects.filter(object => object.label.toLowerCase().includes(search)).map(object => `<button class="entity-item ${selected === object.id ? 'selected' : ''}" data-action="select" data-id="${html(object.id)}"><span class="entity-icon object">${icon(object.kind === 'runway' || object.kind === 'taxiway' ? 'map' : 'building', 20)}</span><span class="entity-text"><b>${html(object.label)}</b><small>${html(object.kind)} · ${Math.round(object.size.x)} × ${Math.round(object.size.z)} m</small></span></button>`).join('');
@@ -105,7 +106,7 @@ function renderInspector() {
   const vehicle = scenario.vehicles.find(item => item.id === selected); const object = scenario.objects.find(item => item.id === selected);
   if (!vehicle && !object) { $('#inspector-content').innerHTML = '<div class="empty-state">Select an object to inspect it.</div>'; return; }
   const item = (vehicle ?? object)!;
-  $('#inspector-content').innerHTML = `<div class="inspector-identity"><div class="large-entity-icon ${vehicle?.role ?? 'object'}">${icon(vehicle ? vehicle.kind === 'jet' ? 'jet' : 'drone' : 'building', 26)}</div><h2>${html(item.label)}</h2><span class="type-badge ${vehicle?.role ?? ''}">${vehicle ? roleName(vehicle.role) : html(object!.kind)}</span><p>${vehicle?.kind === 'jet' ? 'Military jet / Fictional flight profile' : vehicle ? `${vehicle.kind} / Fictional profile` : 'Editable airfield geometry'}</p></div>
+  $('#inspector-content').innerHTML = `<div class="inspector-identity"><div class="large-entity-icon ${vehicle?.role ?? 'object'}">${icon(vehicle ? vehicle.kind === 'jet' ? 'jet' : 'drone' : 'building', 26)}</div><h2>${html(item.label)}</h2><span class="type-badge ${vehicle?.role ?? ''}">${vehicle ? roleName(vehicle.role) : html(object!.kind)}</span><p>${vehicle?.kind === 'jet' ? 'Military jet / Fictional flight profile' : vehicle ? isShahedVisual(vehicle) ? 'Shahed-style model / Fictional profile' : `${vehicle.kind} / Fictional profile` : 'Editable airfield geometry'}</p></div>
     ${vehicle ? `<div class="live-metrics"><div><span>GROUND SPEED</span><b id="metric-speed">0<small> m/s</small></b></div><div><span>ALTITUDE</span><b id="metric-altitude">${vehicle.position.y}<small> m</small></b></div><div class="battery-metric"><span>ENERGY REMAINING <b id="metric-battery">100%</b></span><div class="battery-track"><i id="battery-fill"></i></div><small id="metric-status">Waiting for departure</small></div></div>` : ''}
     <form id="entity-form" class="inspector-form"><details open><summary>Properties</summary>${field('Label', 'label', item.label, 'text', 'maxlength="160" required')}
     ${vehicle ? selectField('Role', 'role', vehicle.role, [['friendly', 'Friendly defender'], ['hostile', 'Hostile intruder'], ['aircraft', 'Aircraft']]) + (vehicle.kind !== 'jet' ? selectField('Airframe', 'kind', vehicle.kind, [['multirotor', 'Multirotor'], ['fixed-wing', 'Fixed-wing']]) : '') : ''}
@@ -293,7 +294,7 @@ try {
   world.assetsReady.then(failed => {
     $('#asset-status').dataset.state = failed.length ? 'partial' : 'ready';
     $('#asset-status').textContent = failed.length ? 'Some scenery could not load. Reload to retry.' : 'Detailed scenery ready';
-    $('#asset-status').title = failed.length ? `Unavailable: ${failed.join(', ')}` : 'Your jet, two tree models, and grass texture are loaded.';
+    $('#asset-status').title = failed.length ? `Unavailable: ${failed.join(', ')}` : 'Your jet, hostile drone, two tree models, and grass texture are loaded.';
   });
   world.onSelect = choose;
   world.onMove = (id, position) => { try { commit(draft => { const object = draft.objects.find(item => item.id === id); if (object) object.position = position; }, 'Object moved.'); } catch {} };
