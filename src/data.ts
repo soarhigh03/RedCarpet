@@ -15,9 +15,9 @@ export function validateScenario(input: unknown): ScenarioDocument {
   number(value.duration, 'Duration', 1, 1200);
   const identifiers = new Set<string>();
   function identifier(id: unknown, path: string) { text(id, path, 80); if (identifiers.has(id as string)) fail(path, 'duplicate identifier'); identifiers.add(id as string); }
-  list(value.objects, 'Map objects', 0, 200).forEach((raw, index) => {
+  list(value.objects, 'Map objects', 0, 300).forEach((raw, index) => {
     const item = record(raw, `Object ${index + 1}`); identifier(item.id, 'Object ID'); text(item.label, 'Object label');
-    choice(item.kind, 'Object type', ['runway', 'taxiway', 'hangar', 'building', 'tower', 'trees', 'zone']);
+    choice(item.kind, 'Object type', ['runway', 'taxiway', 'hangar', 'building', 'tower', 'trees', 'zone', 'pod']);
     vector(item.position, 'Object position'); vector(item.size, 'Object size', true); number(item.rotation, 'Rotation', -3600, 3600);
   });
   list(value.vehicles, 'Vehicles', 1, 75).forEach((raw, index) => {
@@ -31,6 +31,18 @@ export function validateScenario(input: unknown): ScenarioDocument {
     number(item.climbRate, 'Climb rate', 0.1, 100); number(item.runwayLength, 'Runway length', 1, 10000);
     let previous = -1;
     list(item.powerCurve, 'Power curve', 1, 20).forEach(rawPoint => { const point = record(rawPoint, 'Power point'); number(point.speed, 'Curve speed', 0, 300); number(point.watts, 'Curve power', 0, 1000000); if (point.speed <= previous) fail('Power curve', 'speeds must be strictly increasing'); previous = point.speed; });
+    if (item.defence !== undefined) {
+      const defence = record(item.defence, 'Defence profile');
+      if (item.role !== 'friendly') fail('Defence profile', 'only friendly drones can cover a station');
+      vector(defence.station, 'Station'); number(defence.heading, 'Station heading', 0, 360);
+      number(defence.engageRange, 'Engagement range', 0.5, 2000); text(defence.podId, 'Charging pod', 80, true);
+      if (typeof defence.expendOnKill !== 'boolean') fail('Expend on kill', 'expected a boolean');
+      const sensor = record(defence.sensor, 'Sensor');
+      number(sensor.range, 'Sensor range', 1, 20000); number(sensor.minRange, 'Sensor minimum range', 0, 1000);
+      if (sensor.minRange >= sensor.range) fail('Sensor minimum range', 'must be shorter than the measurement range');
+      number(sensor.horizontalFov, 'Horizontal field of view', 1, 360); number(sensor.verticalFov, 'Vertical field of view', 1, 180);
+      number(sensor.rangeResolution, 'Range resolution', 0.001, 1000); number(sensor.rangeAccuracy, 'Range accuracy', 0, 1000);
+    }
   });
   const eventIds = new Set<string>();
   list(value.events, 'Events', 0, 300).forEach(raw => {
@@ -45,6 +57,16 @@ export function validateScenario(input: unknown): ScenarioDocument {
   number(weather.temperature, 'Temperature', -40, 50); number(weather.rain, 'Rain', 0, 1); number(weather.visibility, 'Visibility', 200, 20000);
   const observations = record(value.observations, 'Observations');
   number(observations.noise, 'Observation noise', 0, 200); number(observations.missRate, 'Miss rate', 0, 1); number(observations.latency, 'Latency', 0, 10);
+  if (value.threat !== undefined) {
+    const threat = record(value.threat, 'Threat plan');
+    number(threat.count, 'Threat count', 0, 60); number(threat.seed, 'Threat seed', 0, 4294967295);
+    if (!Number.isInteger(threat.seed)) fail('Threat seed', 'must be a whole number');
+    number(threat.speedMin, 'Slowest threat', 1, 300); number(threat.speedMax, 'Fastest threat', 1, 300);
+    if (threat.speedMin > threat.speedMax) fail('Slowest threat', 'must not exceed the fastest threat');
+    number(threat.altitudeMin, 'Lowest run-in', 1, 5000); number(threat.altitudeMax, 'Highest run-in', 1, 5000);
+    if (threat.altitudeMin > threat.altitudeMax) fail('Lowest run-in', 'must not exceed the highest run-in');
+    number(threat.standoff, 'Release distance', 50, 20000); number(threat.window, 'Release window', 0, 1200); number(threat.weave, 'Weave', 0, 5000);
+  }
   if (value.referenceMap !== undefined) {
     const reference = record(value.referenceMap, 'Reference map');
     choice(reference.id, 'Reference map ID', ['fictional-coast-v1']);
