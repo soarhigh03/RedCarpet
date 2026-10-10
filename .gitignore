@@ -3,3 +3,6 @@ dist/
 .DS_Store
 .sites/
 *.log
+.vercel/
+.env*
+!.env.example
