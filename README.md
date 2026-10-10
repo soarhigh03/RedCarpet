@@ -1,6 +1,6 @@
 # Airfield Defense Sandbox
 
-A browser application for editing a fictional airfield and running repeatable educational flight simulations with user-authored defensive encounters.
+A browser sandbox for one question: given where you put your sentry drones and what their radar can reach, does a wave of ramming drones get through? Everything else — the fictional air base, the flight model, the scene editor — exists to serve that run.
 
 ## Run locally
 
@@ -33,22 +33,53 @@ The supplied grass image is tiled on the ground plane. Runways, taxiways, aprons
 
 The GLBs have no animation clips or separate rigged mechanisms. The simulation moves and pitches the whole jet mesh through its takeoff and climb. Landing gear and control surfaces are part of the static supplied geometry. Display scale is for readability, not a claim about the real aircraft's dimensions.
 
+## Covering screen and hard kill
+
+The point of the sandbox is where sentries stand and what gets through, not building scenery. The tactical air base scenario ships a screen of eight sentry drones and a rolled wave of ramming drones to run at it.
+
+**Sentries are already covering.** They do not wait in a pod and launch when something shows up; each one is airborne on its station before the run starts, 100 m off the runway centreline, spaced along the departure end. Every post has a charging pod on the ground behind it, clear of the pavement. The pods are physical map objects and each sentry references one, which is the hook for the charging-timing mechanism; nothing recharges yet.
+
+**What a sentry can see** is the whole question. The envelope defaults to the published figures for the Ainstein I-79 automotive 4D imaging radar:
+
+| | |
+| --- | --- |
+| Frequency | 76–77 GHz |
+| Measurement range | 0.5–240 m |
+| Range accuracy | ±0.1 m |
+| Range resolution | 0.39 m |
+| Horizontal field | ±60°, 120° total |
+| Vertical field | ±15°, 30° total |
+
+A contact exists only inside that cone. The ±15° vertical band in particular decides a great deal: against a sentry at 60 m, a drone running in at 150 m is outside the band at every range the radar reaches, and is simply never seen until it descends. Reported range is quantised to the 0.39 m resolution cell rather than read off exactly. Each post is given a different boresight so the eight together leave no blind bearing, while any one of them still sees only its own sector — which is what makes placement matter.
+
+**The engagement** runs every step: each sentry reports what its own radar holds; a detected drone is handed to the nearest sentry that is not already committed; that sentry flies a lead intercept, solving for where the drone will be rather than where it is, yawing to keep the contact in its cone as it closes; and the hard kill resolves when the drone is inside both the envelope and the engagement range. The sentry then returns to its station. Pure pursuit loses every tail chase at these speeds, so the lead solution is also what decides assignment — a closer sentry with no intercept solution gives way to one that can actually make the meeting.
+
+A drone that flies its whole course without being stopped reached what it was aimed at, and is counted as a leak.
+
+**Rolling an attack.** The **Threat** panel holds the wave recipe: how many, how fast, how high, how far out they are released, and how wide the release window is. Rolling gives every drone its own bearing, speed, altitude, release time, weaving run-in, and impact point from the seed. The same plan and seed always produce the same wave, so you can move a sentry and replay the identical attack. The rolled drones become ordinary editable vehicles in the scenario.
+
+The scoreboard over the view tracks inbound, holding, tracked, engaging, stopped, and leaked. The default wave of eight is held in full; a wave of fourteen at 45–75 m/s released inside forty seconds saturates the same screen and about half get through. That gap is the thing to tune.
+
 ## Use the workspace
 
+The window belongs to the 3D view. Panels float over it and each one collapses: **Forces** and **Threat** on the left, the **Inspector** on the right, transport and log along the bottom. Collapse states are remembered on this browser.
+
+The header switches between **Simulate** and **Map setup**. Simulate is the tactical view — forces, threat rolls, the engagement. Map setup is where scene building lives: the object list, the add-object palette, weather, and the image-to-3D editor. Adding an object switches you there; adding a vehicle switches you back.
+
 1. Open **Scenarios** to select one of six examples. The performance example includes fifty drones and three aircraft over ten simulated minutes.
-2. Select a vehicle or map object in the scene explorer. Edit the inspector and choose **Apply changes**. Map objects can also be moved with the 3D translation handles. Edits reset the current run and are undoable.
+2. Select a vehicle or map object in the scene explorer. Edit the inspector and choose **Apply changes**. A sentry gains two extra sections: its covering station and boresight, and its radar envelope. Map objects can also be moved with the 3D translation handles. Edits reset the current run and are undoable.
 3. Vehicles have an ordered waypoint route. Coordinates use metres with X east, Y up, and negative Z north. **Add waypoints on map** appends points at 150 m altitude. All routes and altitude values can be edited numerically. Scenes with more than twelve vehicles show the selected route and avoid overlapping labels.
-4. **Add event** creates an authored timeline outcome. Launch and delay events require a waiting vehicle. Stop, expend, and continue require active participants. A supporting participant, when supplied, must be active. Conflicting events are skipped with a reason in the flight log. Events at the same time are ordered by event ID.
-5. Press Play, pause, step by 0.05 s, or change playback speed. Analysis displays telemetry for the selected vehicle. The browser pauses a live run when its tab becomes hidden.
+4. **Add event** creates an authored timeline outcome, which still works alongside the live engagement. Launch and delay events require a waiting vehicle. Stop, expend, and continue require active participants. A supporting participant, when supplied, must be active. Conflicting events are skipped with a reason in the flight log. Events at the same time are ordered by event ID.
+5. Press Play, pause, step by 0.05 s, or change playback speed. The radar coverage toggle in the view tools shows every sentry's sector and elevation limits, with a line to each contact it holds — cool while it only watches, warm once it commits. Analysis displays telemetry for the selected vehicle. The browser pauses a live run when its tab becomes hidden.
 6. **Save project** stores the scenario in browser local storage and the latest recording in IndexedDB. **Replay** captures the current run and allows scrubbing. Scenarios and recordings can be exported/imported as JSON; CSV contains one telemetry row per vehicle per simulated second. Browser storage is local to the browser profile and site origin.
 
 ## Tactical air base example
 
-**Scenarios → Tactical air base** opens a larger fictional field, **서해 전술비행단 (가상)**. It is built from the general form of a single-runway tactical air base rather than from any survey or photograph: one 2,700 m runway on a 020° axis, taxiways paralleling it end to end, crossovers and turn pads, two combed rows of aircraft shelters on their own stubs, a maintenance apron with a hangar line, a support area with tower and barracks, fuel and munitions storage, and a perimeter road. Outside that road a generated woodland belt wraps the base on every side, clipped to clear the built field and to stop at the edge of the modelled ground. 165 map objects in all, about 4,700 trees among them.
+**Scenarios → Tactical air base** opens a larger fictional field, **서해 전술비행단 (가상)**. It is built from the general form of a single-runway tactical air base rather than from any survey or photograph: one 2,700 m runway on a 020° axis, taxiways paralleling it end to end, crossovers and turn pads, two combed rows of aircraft shelters on their own stubs, a maintenance apron with a hangar line, a support area with tower and barracks, fuel and munitions storage, eight sentry charging pods, and a perimeter road. Outside that road a generated woodland belt wraps the base on every side, clipped to clear the built field and to stop at the edge of the modelled ground. 173 map objects in all, about 4,700 trees among them.
 
 The layout is authored in runway-local metres in `src/airbase.ts` — `u` along the runway, `v` across it — and rotated onto the base axis, so every piece stays aligned if you change the heading. Dimensions, headings, and heights are illustrative choices, not measurements, and the field does not reconstruct a real installation.
 
-The scenario runs three jet departures from the south threshold against an authored intrusion from the west: two tracks are stopped by patrolling defenders, one defender is expended, and a third track continues through. Everything is editable afterwards — objects move with the translation handles, routes and energy profiles open in the inspector, and the event script is yours to rewrite.
+The scenario runs three jet departures from the south threshold while eight sentries cover the runway and a rolled wave of ramming drones runs in from random bearings. Nothing about the outcome is authored: the engagement is decided by where the sentries are, what their radar reaches, and whether a lead intercept exists. Everything is editable afterwards — objects move with the translation handles, stations and envelopes open in the inspector, and the wave re-rolls from the Threat panel.
 
 Runway end markings follow the object's rotation, so a runway you rotate repaints itself in the 01–36 convention. The ground boundary and access roads are drawn from the extent of the built field, with woodland treated as landscape outside it, and the default camera distances, zoom limits, and shadow extent scale with the scene, so small and large fields both frame correctly.
 
@@ -56,7 +87,7 @@ Every grove in the belt is an ordinary map object. Select one to move, resize, o
 
 ## Fictional image to 3D
 
-Choose **Image to 3D** in the project toolbar. The bundled coastal airport is newly generated artwork with no reference photograph. Its demo title, **서산공군기지(가상)**, labels a fictional scene; the layout is not a reconstruction of a real installation.
+Switch to **Map setup** and choose **Image to 3D**. The bundled coastal airport is newly generated artwork with no reference photograph. Its demo title, **서산공군기지(가상)**, labels a fictional scene; the layout is not a reconstruction of a real installation.
 
 Select an outline in the image or object list, then change its label, type, dimensions, rotation, and illustrative height. **Draw outline** adds a rectangle with two clicks. **Build 3D scene** replaces the current project with an editable coastal scene and one educational takeoff; **Undo** restores the previous project. Reopening the image editor preserves existing flights, routes, weather, and scripted events. The map icon beside Undo toggles the reference image under the 3D geometry.
 
@@ -68,12 +99,14 @@ Outlines become ordinary map objects, so the existing inspector, translation han
 
 The scene and vehicle profiles are fictional. The supplied jet artwork does not establish verified aircraft performance data. Flight uses a fixed 0.05 s step, direct waypoint motion, limited climb, and educational wind drift. Energy is the integral of the user-defined airspeed/power curve. Available capacity decreases by 0.8% per degree below 20°C, with a 55% floor; this is an adjustable-model assumption, not a measured battery specification. Depletion ends the modeled flight at its current location.
 
-Observations are synthetic, seeded noisy positions with configurable loss and delay. Rain and visibility increase loss through a toy model. They are not radar waveforms. Encounter outcomes happen at authored times and do not derive from physical contact or sensor decisions. No interception guidance, device control, or targeting firmware is included. The separate hardware report is available from **Hardware lab**.
+Observations are synthetic, seeded noisy positions with configurable loss and delay. Rain and visibility increase loss through a toy model. They are not radar waveforms.
+
+The sentry envelope borrows published Ainstein I-79 figures because they are a concrete, honest set of numbers to reason about coverage with. That is the whole extent of the borrowing: detection is a cone-and-range test against those figures, and everything after a contact — which sentry is sent, the lead-pursuit solution, the modelled outcome — is a teaching abstraction with no basis in how any real system behaves. There is no guidance, fire control, waveform, device interface, or targeting firmware here, and that radar is an automotive and industrial part, not a counter-drone product. Encounter outcomes resolve from the modelled geometry, and authored timeline events remain available alongside it. The separate hardware report is available from **Hardware lab**.
 
 ## Data and verification
 
 `ScenarioDocument` and `RunRecord` use schema version 1. Runs include a scenario snapshot and simulator version. Replay uses recorded 0.5 s frames with visual interpolation; telemetry is sampled each second. Pause and playback rates do not change simulation steps. Identical scenario and seed reproduce results within this simulator version. Invalid imports are rejected before replacing the open scenario.
 
-`npm run verify` checks representative outcomes, conflict handling, takeoff failures, energy accounting, data validation, repeatability, and the ten-minute performance case. It writes its result to the sibling outputs directory. Browser rendering, persistence, downloads, and editing are separately checked through the visible UI.
+`npm run verify` checks representative outcomes, conflict handling, takeoff failures, energy accounting, data validation, repeatability, and the ten-minute performance case. For the engagement it checks the cone and range envelope against each published I-79 figure, the lead-intercept solution including the case with no solution, that sentries start covering at 100 m with a pod each, that the default wave is held with every kill inside engagement range, that a rolled wave is reproducible from its plan, and that a faster saturating wave gets through. It writes its result to the sibling outputs directory. Browser rendering, persistence, downloads, and editing are separately checked through the visible UI.
 
 The application targets desktop Chrome and Edge with WebGL2. All calculations and user data remain in the browser. The source uses TypeScript, Vite, and Three.js; it has no server API or environment secrets. Fonts load from Google Fonts with a system-font fallback. Hosting access is managed by your chosen provider.
