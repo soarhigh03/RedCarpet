@@ -117,7 +117,9 @@ export class AirfieldScene {
   /** The boundary and access roads follow the scene, so any field size keeps a readable surround. */
   private buildTerrainDetails(objects: MapObject[]) {
     dispose(this.terrainDetails); this.terrainDetails.clear();
-    const box = this.measure(objects);
+    // Woodland is landscape rather than airfield, so the boundary follows the built field inside it.
+    const field = objects.filter(item => item.kind !== 'trees');
+    const box = this.measure(field.length ? field : objects);
     const limitX = TERRAIN.width / 2 - 60; const limitZ = TERRAIN.depth / 2 - 60;
     const minX = Math.max(-limitX, box.minX - 190); const maxX = Math.min(limitX, box.maxX + 190);
     const minZ = Math.max(-limitZ, box.minZ - 190); const maxZ = Math.min(limitZ, box.maxZ + 190);

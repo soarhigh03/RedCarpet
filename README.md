@@ -25,6 +25,8 @@ Changing appearance does not restart, step, or modify a simulation. Cameras, sel
 
 The jet uses the supplied Meshy military-plane GLB, and each tree grove mixes both supplied Meshy tree models. Browser copies are in `public/models/`, with lower-detail tree meshes for distant views. Trees share geometry and materials and are drawn in instances. All mesh textures and the Draco decoder are served from this project; no external model service is needed. The source files in Downloads are untouched.
 
+A grove stands as many trees as its footprint holds, so a large woodland fills out instead of scattering a dozen trees, and the layout is repeatable on every load. Each grove carries three levels of detail: the supplied meshes up close, the lower-detail copies from about 340 m, and a generated canopy of a few triangles beyond about 1.1 km. The supplied models cost 11,000 to 35,000 triangles each, so the far level is what lets thousands of trees stand around a field without a frame-rate cost; at the default camera a 4,700-tree woodland draws in 174 instanced calls.
+
 Hostile fixed-wing drones use the supplied `Meshy_AI_drone_1010190247_texture.glb`, presented as a Shahed-style model. This applies to existing, imported, and newly added hostile fixed-wing vehicles. Friendly drones retain their own appearance. The artwork changes the visual model only; routes, battery curves, flight settings, and scripted outcomes remain fictional and editable. The optimized browser copy is `public/models/hostile-drone.glb`.
 
 The supplied grass image is tiled on the ground plane. Runways, taxiways, aprons, and roads remain paved surfaces above it, including after map edits. Use **Follow** on an aircraft or a tree grove for a closer view, or orbit and zoom with the mouse.
@@ -42,13 +44,15 @@ The GLBs have no animation clips or separate rigged mechanisms. The simulation m
 
 ## Tactical air base example
 
-**Scenarios → Tactical air base** opens a larger fictional field, **서해 전술비행단 (가상)**. It is built from the general form of a single-runway tactical air base rather than from any survey or photograph: one 2,700 m runway on a 020° axis, taxiways paralleling it end to end, crossovers and turn pads, two combed rows of aircraft shelters on their own stubs, a maintenance apron with a hangar line, a support area with tower and barracks, fuel and munitions storage, and a perimeter road through wooded ground. Eighty-four map objects in all.
+**Scenarios → Tactical air base** opens a larger fictional field, **서해 전술비행단 (가상)**. It is built from the general form of a single-runway tactical air base rather than from any survey or photograph: one 2,700 m runway on a 020° axis, taxiways paralleling it end to end, crossovers and turn pads, two combed rows of aircraft shelters on their own stubs, a maintenance apron with a hangar line, a support area with tower and barracks, fuel and munitions storage, and a perimeter road. Outside that road a generated woodland belt wraps the base on every side, clipped to clear the built field and to stop at the edge of the modelled ground. 165 map objects in all, about 4,700 trees among them.
 
 The layout is authored in runway-local metres in `src/airbase.ts` — `u` along the runway, `v` across it — and rotated onto the base axis, so every piece stays aligned if you change the heading. Dimensions, headings, and heights are illustrative choices, not measurements, and the field does not reconstruct a real installation.
 
 The scenario runs three jet departures from the south threshold against an authored intrusion from the west: two tracks are stopped by patrolling defenders, one defender is expended, and a third track continues through. Everything is editable afterwards — objects move with the translation handles, routes and energy profiles open in the inspector, and the event script is yours to rewrite.
 
-Runway end markings follow the object's rotation, so a runway you rotate repaints itself in the 01–36 convention. The ground boundary and access roads are drawn from the extent of the built scene, and the default camera distances, zoom limits, and shadow extent scale with it, so small and large fields both frame correctly.
+Runway end markings follow the object's rotation, so a runway you rotate repaints itself in the 01–36 convention. The ground boundary and access roads are drawn from the extent of the built field, with woodland treated as landscape outside it, and the default camera distances, zoom limits, and shadow extent scale with the scene, so small and large fields both frame correctly.
+
+Every grove in the belt is an ordinary map object. Select one to move, resize, or delete it like any other, or raise its height to thicken the canopy.
 
 ## Fictional image to 3D
 

@@ -88,12 +88,13 @@ export class SceneAssets {
   private distant(variant: 'a' | 'b'): ModelPart[] {
     const cached = this.distantParts.get(variant); if (cached) return cached;
     const narrow = variant === 'a';
-    const canopy = new THREE.ConeGeometry(narrow ? 0.34 : 0.43, narrow ? 0.84 : 0.72, 6);
-    const trunk = new THREE.CylinderGeometry(0.03, 0.055, 0.46, 4);
-    const parts: ModelPart[] = [
-      { geometry: trunk, material: new THREE.MeshStandardMaterial({ color: 0x6b6450, roughness: 1, metalness: 0 }), matrix: new THREE.Matrix4().makeTranslation(0, 0.23, 0) },
-      { geometry: canopy, material: new THREE.MeshStandardMaterial({ color: narrow ? 0x5e7d64 : 0x74906f, roughness: 1, metalness: 0 }), matrix: new THREE.Matrix4().makeTranslation(0, narrow ? 0.58 : 0.64, 0) },
-    ];
+    // One canopy, no trunk: a trunk is below a pixel at this range and would double the draw calls.
+    const canopy = new THREE.ConeGeometry(narrow ? 0.33 : 0.42, 0.94, 6);
+    const parts: ModelPart[] = [{
+      geometry: canopy,
+      material: new THREE.MeshStandardMaterial({ color: narrow ? 0x5e7d64 : 0x74906f, roughness: 1, metalness: 0 }),
+      matrix: new THREE.Matrix4().makeTranslation(0, 0.53, 0),
+    }];
     this.distantParts.set(variant, parts); return parts;
   }
   /** Tree count follows the footprint, so a large woodland fills out instead of scattering a dozen trees. */

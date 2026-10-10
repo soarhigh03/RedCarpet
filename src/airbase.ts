@@ -30,6 +30,7 @@ const SHELTER_ROW_B = [-1000, -800, -600, -400, 400, 600, 800, 1000];
 
 export function airbaseObjects(): MapObject[] {
   const objects: MapObject[] = [];
+  const field = { minU: Infinity, maxU: -Infinity, minV: Infinity, maxV: -Infinity };
   /**
    * across = footprint across the runway, along = footprint parallel to it, both in metres.
    * facing turns the mesh a quarter turn without changing that footprint, so shelter and hangar
@@ -41,6 +42,9 @@ export function airbaseObjects(): MapObject[] {
       id: `ab-${id}`, label, kind, position: airbasePoint(u, v),
       size: { x: turned ? along : across, y: height, z: turned ? across : along }, rotation: -AIRBASE_HEADING + facing,
     });
+    if (kind === 'trees') return;
+    field.minU = Math.min(field.minU, u - along / 2); field.maxU = Math.max(field.maxU, u + along / 2);
+    field.minV = Math.min(field.minV, v - across / 2); field.maxV = Math.max(field.maxV, v + across / 2);
   };
 
   // Runway, the taxiways that parallel it end to end, and the links between them.
@@ -98,19 +102,29 @@ export function airbaseObjects(): MapObject[] {
   add('grove-inner-south', 'Southwest tree line', 'trees', -1150, -350, 220, 24, 700);
   add('grove-inner-north', 'North tree line', 'trees', 1480, 900, 420, 24, 240);
 
-  // Woodland outside the perimeter: a jittered belt that wraps the base and stops at the edge of
-  // the modelled ground. Groves are ordinary map objects, so any of them can be moved or deleted.
+  // Woodland outside the perimeter: a jittered belt that wraps the base, clipped to clear the built
+  // field and to stop at the edge of the modelled ground. Groves are ordinary map objects, so any
+  // of them can be moved, resized, or deleted.
+  const clearance = 50;
+  /** Half-extent a grove may keep on one axis without reaching into the field, or -1 if it straddles it. */
+  const clip = (centre: number, half: number, low: number, high: number) =>
+    centre <= low ? Math.min(half, low - centre) : centre >= high ? Math.min(half, centre - high) : -1;
   let stand = 0;
   for (let column = 0; column < 13; column++) for (let row = 0; row < 12; row++) {
     const seed = column * 31 + row;
     const u = Math.round(-2850 + column * 475 + (scatter(seed) - 0.5) * 180);
     const v = Math.round(-2400 + row * 460 + (scatter(seed + 71) - 0.5) * 180);
-    if (Math.abs(u) < 1820 && v > -780 && v < 1740) continue;
     const point = airbasePoint(u, v);
     if (Math.abs(point.x) > 2650 || Math.abs(point.z) > 2550) continue;
+    let along = 360 + Math.round(scatter(seed + 17) * 260);
+    let across = 360 + Math.round(scatter(seed + 41) * 260);
+    const roomU = clip(u, along / 2, field.minU - clearance, field.maxU + clearance);
+    const roomV = clip(v, across / 2, field.minV - clearance, field.maxV + clearance);
+    if (roomU >= roomV) along = roomU * 2; else across = roomV * 2;
+    if (Math.min(along, across) < 120) continue;
     stand++;
     add(`wood-${column}-${row}`, `Outer woodland ${String(stand).padStart(2, '0')}`, 'trees',
-      u, v, 360 + Math.round(scatter(seed + 17) * 260), 24 + Math.round(scatter(seed + 5) * 16), 360 + Math.round(scatter(seed + 41) * 260));
+      u, v, Math.round(across), 24 + Math.round(scatter(seed + 5) * 16), Math.round(along));
   }
 
   return objects;

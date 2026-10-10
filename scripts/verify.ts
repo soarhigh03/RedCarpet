@@ -34,6 +34,27 @@ check('Air base layout stays on its runway axis and inside the modelled ground',
   assert(scenario.objects.every(object => object.rotation === -AIRBASE_HEADING || object.rotation === -AIRBASE_HEADING - 90));
   assert(scenario.objects.some(object => object.rotation === -AIRBASE_HEADING - 90));
   assert(scenario.objects.every(object => Math.abs(object.position.x) < 3100 && Math.abs(object.position.z) < 3000));
+  const corner = (object: typeof scenario.objects[number], axis: 'x' | 'z') => {
+    const angle = object.rotation * Math.PI / 180; const sin = Math.abs(Math.sin(angle)); const cos = Math.abs(Math.cos(angle));
+    return Math.abs(object.position[axis]) + (axis === 'x' ? object.size.x / 2 * cos + object.size.z / 2 * sin : object.size.x / 2 * sin + object.size.z / 2 * cos);
+  };
+  // Every grove has to stand on the modelled ground, which is 6200 x 6000 m.
+  assert(scenario.objects.every(object => corner(object, 'x') <= 3100 && corner(object, 'z') <= 3000));
+  const woods = scenario.objects.filter(object => object.id.startsWith('ab-wood-'));
+  assert(woods.length > 60 && scenario.objects.length <= 200);
+  // Everything is axis aligned in runway-local metres, so nothing growing on the field is a rectangle test.
+  const turn = AIRBASE_HEADING * Math.PI / 180;
+  const plan = (object: typeof scenario.objects[number]) => {
+    const turned = object.rotation === -AIRBASE_HEADING - 90;
+    return {
+      u: object.position.x * Math.sin(turn) - object.position.z * Math.cos(turn), v: object.position.x * Math.cos(turn) + object.position.z * Math.sin(turn),
+      halfU: (turned ? object.size.x : object.size.z) / 2, halfV: (turned ? object.size.z : object.size.x) / 2,
+    };
+  };
+  const built = scenario.objects.filter(object => object.kind !== 'trees').map(plan);
+  for (const grove of woods.map(plan)) {
+    assert(built.every(item => Math.abs(grove.u - item.u) >= grove.halfU + item.halfU || Math.abs(grove.v - item.v) >= grove.halfV + item.halfV));
+  }
   const north = airbasePoint(AIRBASE_RUNWAY.length / 2, 0); const south = airbasePoint(-AIRBASE_RUNWAY.length / 2, 0);
   assert.equal(Math.round(Math.hypot(north.x - south.x, north.z - south.z)), AIRBASE_RUNWAY.length);
   assert.equal(Math.round(Math.atan2(north.x - south.x, south.z - north.z) * 180 / Math.PI), AIRBASE_HEADING);
