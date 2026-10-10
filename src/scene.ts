@@ -12,6 +12,8 @@ import { IMAGE_MAP_DEPTH, IMAGE_MAP_WIDTH } from './image-map';
 import { type MapObject, type ScenarioDocument, type Snapshot, type Vec3, type Vehicle, type UnitState, isActive } from './types';
 
 const colors = { friendly: 0x27c9ab, hostile: 0xf09266, aircraft: 0x8ea6e9 };
+/** Accent, kept for the one trajectory you are looking at and the ring under it. */
+const ACCENT = 0xccff33;
 const TERRAIN = { width: 6200, depth: 6000 };
 /** Runway end marking for a scene rotation, in the 01–36 convention. */
 function designator(bearing: number) { const value = ((Math.round(bearing / 10) % 36) + 36) % 36; return String(value || 36).padStart(2, '0'); }
@@ -90,7 +92,7 @@ export class AirfieldScene {
     this.transform = new TransformControls(this.camera, this.renderer.domElement); this.transform.setMode('translate'); this.transform.showY = false; this.transform.setSize(0.65); this.transform.setTranslationSnap(5); this.scene.add(this.transform.getHelper());
     this.transform.addEventListener('dragging-changed', event => { this.controls.enabled = !event.value; });
     this.transform.addEventListener('mouseUp', () => { const target = this.transform.object; if (target) this.onMove(this.selected, { x: Math.round(target.position.x), y: Math.round(target.position.y), z: Math.round(target.position.z) }); });
-    this.selectedRing = new THREE.Mesh(new THREE.RingGeometry(30, 33, 64), new THREE.MeshBasicMaterial({ color: 0x19b69a, transparent: true, opacity: 0.8, side: THREE.DoubleSide })); this.selectedRing.rotation.x = -Math.PI / 2; this.selectedRing.visible = false; this.marks.add(this.selectedRing);
+    this.selectedRing = new THREE.Mesh(new THREE.RingGeometry(30, 33, 64), new THREE.MeshBasicMaterial({ color: ACCENT, transparent: true, opacity: 0.85, side: THREE.DoubleSide, toneMapped: false })); this.selectedRing.rotation.x = -Math.PI / 2; this.selectedRing.visible = false; this.marks.add(this.selectedRing);
     const rainGeometry = new THREE.BufferGeometry(); const rainPositions = new Float32Array(1800);
     for (let index = 0; index < 600; index++) { rainPositions[index * 3] = Math.sin(index * 13) * 1700; rainPositions[index * 3 + 1] = (index * 53) % 1100; rainPositions[index * 3 + 2] = Math.cos(index * 19) * 1700; }
     rainGeometry.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3)); this.rain = new THREE.Points(rainGeometry, new THREE.PointsMaterial({ color: 0xe0eeff, size: 3, transparent: true, opacity: 0.4 })); this.rain.visible = false; this.scene.add(this.rain);
@@ -273,7 +275,7 @@ export class AirfieldScene {
         this.coverage.add(envelope); this.envelopes.set(vehicle.id, envelope);
       }
       const points = [vehicle.position, ...vehicle.route].map(point => new THREE.Vector3(point.x, Math.max(5, point.y), point.z));
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({ color: colors[vehicle.role], dashSize: 16, gapSize: 12, transparent: true, opacity: 0.38 })); line.computeLineDistances(); line.userData.entityId = vehicle.id; this.routes.add(line);
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({ color: colors[vehicle.role], dashSize: 16, gapSize: 12, transparent: true, opacity: 0.38 })); line.computeLineDistances(); line.userData.entityId = vehicle.id; line.userData.roleColor = colors[vehicle.role]; this.routes.add(line);
     });
     this.coverage.visible = this.showCoverage;
     const weather = scenario.weather; this.scene.fog = new THREE.FogExp2(weather.rain > 0.3 ? 0xb7c5ce : 0xd9e4e6, 1 / Math.max(800, weather.visibility) * 0.7); this.scene.background = new THREE.Color(weather.rain > 0.3 ? 0xb7c5ce : 0xd9e4e6); this.rain.visible = weather.rain > 0;
@@ -284,7 +286,13 @@ export class AirfieldScene {
     this.selected = id; this.transform.detach();
     const object = this.objects.get(id); if (object && !this.running && !this.editingRoute) this.transform.attach(object);
     this.labels.forEach((label, key) => label.classList.toggle('selected', key === id));
-    this.routes.children.forEach(route => { const routeMaterial = (route as THREE.Line).material as THREE.LineDashedMaterial; routeMaterial.opacity = route.userData.entityId === id ? 0.95 : 0.23; route.visible = this.routes.children.length <= 12 || route.userData.entityId === id; });
+    this.routes.children.forEach(route => {
+      const routeMaterial = (route as THREE.Line).material as THREE.LineDashedMaterial;
+      const chosen = route.userData.entityId === id;
+      routeMaterial.opacity = chosen ? 0.95 : 0.23;
+      routeMaterial.color.setHex(chosen ? ACCENT : route.userData.roleColor);
+      route.visible = this.routes.children.length <= 12 || chosen;
+    });
   }
   setAppearance(appearance: SceneAppearance) {
     this.appearance = appearance;

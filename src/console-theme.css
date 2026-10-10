@@ -235,3 +235,9 @@ dialog::backdrop { background: #01060ac7; backdrop-filter: blur(5px); }
 .render-switch button.active { background: #133349; color: #7fd7f0; }
 .map-tools .button { background: #0e1e2d; border-color: #24405a; color: #9dbed2; }
 .map-tools .button:hover { background: #14293c; color: #d6edf6; }
+
+/* Accent on the console theme, where the lime carries. */
+.brand-mark i { background: var(--accent); box-shadow: 0 0 12px #ccff3340; }
+.status-pill.running { color: #cfe89a; border-color: #4a6b2a; }
+.status-pill.running i { background: var(--accent); box-shadow: 0 0 7px #ccff3399; }
+.unit-label.selected { border-color: var(--accent); box-shadow: 0 0 10px #ccff3333; }

@@ -207,3 +207,9 @@ dialog.image-map-dialog { width: 1120px; max-width: 96vw; }
   .scene-key, .render-switch { bottom: 148px; }
   .viewport-footer { padding-bottom: 132px; }
 }
+
+/* Accent. Used sparingly: the mark, the selected trajectory, and the live-run tell. */
+:root { --accent: #ccff33; }
+.brand-mark i { background: var(--accent); }
+.status-pill.running i { background: var(--accent); box-shadow: 0 0 0 3px #ccff3326; }
+.unit-label.selected { border-color: var(--accent); box-shadow: 0 2px 8px #ccff3340; }
