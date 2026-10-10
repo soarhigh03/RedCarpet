@@ -60,6 +60,23 @@ A drone that flies its whole course without being stopped reached what it was ai
 
 The scoreboard over the view tracks inbound, holding, tracked, engaging, stopped, and leaked. The default wave of eight is held in full; a wave of fourteen at 45–75 m/s released inside forty seconds saturates the same screen and about half get through. That gap is the thing to tune.
 
+## The departures
+
+The aircraft are F-35A Lightning IIs, flown on published open figures rather than invented ones:
+
+| | |
+| --- | --- |
+| Rotation | ~165 kt (85 m/s) |
+| Initial climb to 5,000 ft | 190 kt at 40,000 ft/min (203 m/s) |
+| Maximum speed | Mach 1.6 (~536 m/s) |
+| MTOW | 31,751 kg |
+
+**The take-off ground roll is not published.** Eurocontrol's performance database lists both V2 and the take-off distance as "no data", and Lockheed Martin and the USAF have not released a figure. Rather than invent one, the acceleration is derived from thrust to weight — one F135 at roughly 191 kN against a light internal-fuel load gives about 0.85 g of net accelerating force — which puts the roll near 440 m, and near 720 m at MTOW. The model rotates at 397 m with the 4 m/s headwind on the field, which is the right order for a light jet in afterburner. USAF wing policy avoids planned operations on runways under 8,000 ft (2,438 m); the base runway is 2,700 m and 2,500 m of it is marked usable.
+
+The climb figure is a capability ceiling, not what you will see. 40,000 ft/min is a maximum-performance number; the departure route here asks for a shallow climb, so the jets leave the runway at 3,300 ft/min and are passing 6,500 ft/min by 300 m as they accelerate. Departures roll on runway 02 into a wind travelling toward 200, as they would be planned.
+
+Everything downstream of those figures is this sandbox's simplified flight model — fixed 0.05 s steps, direct waypoint motion, an abstract energy budget that is not jet fuel — and the supplied jet artwork is a generic airframe, not an F-35 shape.
+
 ## Use the workspace
 
 The window belongs to the 3D view. Panels float over it and each one collapses: **Forces** and **Threat** on the left, the **Inspector** on the right, transport and log along the bottom. Collapse states are remembered on this browser.
@@ -97,7 +114,7 @@ Outlines become ordinary map objects, so the existing inspector, translation han
 
 ## Models and limits
 
-The scene and vehicle profiles are fictional. The supplied jet artwork does not establish verified aircraft performance data. Flight uses a fixed 0.05 s step, direct waypoint motion, limited climb, and educational wind drift. Energy is the integral of the user-defined airspeed/power curve. Available capacity decreases by 0.8% per degree below 20°C, with a 55% floor; this is an adjustable-model assumption, not a measured battery specification. Depletion ends the modeled flight at its current location.
+The base, the sentries, and the hostile drones are fictional. The departures are not: they fly published F-35A figures, with the unpublished ground roll derived from thrust to weight and labelled as such. The supplied jet artwork is a generic airframe and does not establish aircraft performance data. Flight uses a fixed 0.05 s step, direct waypoint motion, limited climb, and educational wind drift. Energy is the integral of the user-defined airspeed/power curve. Available capacity decreases by 0.8% per degree below 20°C, with a 55% floor; this is an adjustable-model assumption, not a measured battery specification. Depletion ends the modeled flight at its current location.
 
 Observations are synthetic, seeded noisy positions with configurable loss and delay. Rain and visibility increase loss through a toy model. They are not radar waveforms.
 

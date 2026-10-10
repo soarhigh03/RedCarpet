@@ -5,7 +5,7 @@ import { Simulation, powerAt, temperatureFactor } from '../src/simulation';
 import { makeScenario } from '../src/scenarios';
 import { buildImageScenario, exampleFootprints, objectOutline } from '../src/image-map';
 import { AIRBASE_HEADING, AIRBASE_RUNWAY, airbasePoint } from '../src/airbase';
-import { AIRBASE_AIM, rollWave } from '../src/scenarios';
+import { AIRBASE_AIM, F35A, rollWave } from '../src/scenarios';
 import { contact, DEFAULT_THREAT, I79_RADAR, interceptPoint } from '../src/defence';
 import { csv, validateRun, validateScenario } from '../src/data';
 import { clone, type ScenarioDocument } from '../src/types';
@@ -61,6 +61,31 @@ check('Air base layout stays on its runway axis and inside the modelled ground',
   assert.equal(Math.round(Math.hypot(north.x - south.x, north.z - south.z)), AIRBASE_RUNWAY.length);
   assert.equal(Math.round(Math.atan2(north.x - south.x, south.z - north.z) * 180 / Math.PI), AIRBASE_HEADING);
   assert.equal(new Set(scenario.objects.map(object => object.id)).size, scenario.objects.length);
+});
+check('Departures fly the F-35A figures and rotate inside the runway', () => {
+  const knots = (speed: number) => speed / 0.514444;
+  const feetPerMinute = (speed: number) => speed * 60 / 0.3048;
+  assert.equal(Math.round(knots(F35A.takeoffSpeed)), 165, 'rotation near the reported 165 kt');
+  assert.equal(Math.round(feetPerMinute(F35A.climbRate) / 1000), 40, 'climb capability of 40,000 ft/min');
+  assert.equal(Math.round(F35A.maxSpeed / 335 * 100) / 100, 1.6, 'Mach 1.6 maximum');
+  // The real ground roll is unpublished; the derived acceleration has to land somewhere sane.
+  const roll = F35A.takeoffSpeed ** 2 / (2 * F35A.acceleration);
+  assert(roll > 350 && roll < 600, `derived ground roll ${Math.round(roll)} m`);
+  assert(F35A.usableRunway < 2700 && F35A.usableRunway > 2438, 'inside the runway and above the 8,000 ft policy floor');
+  const scenario = makeScenario('airbase');
+  const jet = scenario.vehicles.find(vehicle => vehicle.kind === 'jet')!;
+  assert.equal(jet.takeoffSpeed, F35A.takeoffSpeed); assert.equal(jet.climbRate, F35A.climbRate);
+  // Rolling into wind, not downwind: a departure on 02 wants wind travelling toward 200.
+  assert.equal(scenario.weather.windDirection, 200);
+  const simulation = new Simulation(scenario);
+  let rotation = 0;
+  while (!simulation.snapshot.finished && !rotation) {
+    simulation.step(1);
+    const unit = simulation.snapshot.units.find(item => item.id === jet.id)!;
+    if (unit.status === 'airborne') rotation = unit.distance;
+  }
+  assert(rotation > 0 && rotation < jet.runwayLength, `rotates after ${Math.round(rotation)} m, inside the usable runway`);
+  assert(Math.abs(rotation - roll) < 120, 'headwind shortens the roll rather than transforming it');
 });
 check('Radar envelope follows the published I-79 figures', () => {
   const origin = { x: 0, y: 60, z: 0 };

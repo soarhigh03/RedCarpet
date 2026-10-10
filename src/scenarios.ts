@@ -5,6 +5,29 @@ import { clone, type MapKind, type MapObject, type ScenarioDocument, type Threat
 function object(id: string, label: string, kind: MapKind, x: number, z: number, width: number, height: number, depth: number, rotation = 0): MapObject {
   return { id, label, kind, position: { x, y: 0, z }, size: { x: width, y: height, z: depth }, rotation };
 }
+/**
+ * F-35A Lightning II departure profile, from published figures.
+ *
+ * Rotation is widely reported at about 165 kt. Eurocontrol's aircraft performance database gives
+ * the initial climb to 5,000 ft as 190 kt at 40,000 ft/min and MTOW as 31,751 kg, and lists both V2
+ * and the take-off ground roll as "no data" — the roll is simply not published. The acceleration
+ * here is therefore derived from thrust to weight rather than quoted: one F135 at roughly 191 kN
+ * against a light internal-fuel load gives about 0.85 g of net accelerating force, which puts the
+ * roll near 440 m and near 720 m at MTOW. USAF wing policy avoids planned operations on runways
+ * under 8,000 ft (2,438 m), which the 2,700 m runway here clears.
+ *
+ * These are open figures for the real aircraft. Everything the simulation then does with them is
+ * its own simplified flight model, and the supplied jet artwork is a generic airframe, not an F-35.
+ */
+export const F35A = {
+  type: 'F-35A Lightning II',
+  takeoffSpeed: 85,    // m/s — about 165 kt rotation
+  acceleration: 8.3,   // m/s² — from thrust to weight; the ground roll is unpublished
+  climbRate: 203,      // m/s — 40,000 ft/min
+  cruise: 250,         // m/s — high subsonic
+  maxSpeed: 536,       // m/s — Mach 1.6, the published maximum
+  usableRunway: 2500,  // m — inside the 2,700 m runway, above the 8,000 ft policy floor
+};
 export function makeVehicle(id: string, role: Vehicle['role'], index = 0): Vehicle {
   const aircraft = role === 'aircraft';
   const hostile = role === 'hostile';
@@ -14,10 +37,15 @@ export function makeVehicle(id: string, role: Vehicle['role'], index = 0): Vehic
     role, kind: aircraft ? 'jet' : hostile ? 'fixed-wing' : 'multirotor', position,
     route: aircraft ? [{ x: 0, y: 400, z: -1400 }, { x: 500, y: 650, z: -2100 }] : hostile ? [{ x: 250, y: 180, z: -400 }, { x: -700, y: 100, z: 200 }] : [{ x: -300, y: 180, z: -300 }, { x: 250, y: 180, z: -550 }, { x: -600, y: 100, z: 500 }],
     departAt: aircraft ? 4 : hostile ? index * 12 : 8 + index * 6,
-    speed: aircraft ? 110 : hostile ? 32 : 28, maxSpeed: aircraft ? 160 : 45,
-    batteryWh: aircraft ? 6000 : 180,
-    powerCurve: aircraft ? [{ speed: 0, watts: 20000 }, { speed: 160, watts: 100000 }] : [{ speed: 0, watts: 200 }, { speed: 20, watts: 320 }, { speed: 45, watts: 850 }],
-    acceleration: 7, takeoffSpeed: 70, climbRate: 18, runwayLength: 1750,
+    speed: aircraft ? F35A.cruise : hostile ? 32 : 28, maxSpeed: aircraft ? F35A.maxSpeed : 45,
+    batteryWh: aircraft ? 20000 : 180,
+    powerCurve: aircraft
+      ? [{ speed: 0, watts: 25000 }, { speed: 85, watts: 90000 }, { speed: 250, watts: 320000 }, { speed: 536, watts: 900000 }]
+      : [{ speed: 0, watts: 200 }, { speed: 20, watts: 320 }, { speed: 45, watts: 850 }],
+    acceleration: aircraft ? F35A.acceleration : 7,
+    takeoffSpeed: aircraft ? F35A.takeoffSpeed : 70,
+    climbRate: aircraft ? F35A.climbRate : 18,
+    runwayLength: aircraft ? F35A.usableRunway : 1750,
   };
 }
 export function makeScenario(preset = 'successful'): ScenarioDocument {
@@ -134,7 +162,8 @@ function makeAirbaseScenario(): Partial<ScenarioDocument> {
     objects: airbaseObjects(),
     vehicles: [...aircraft, ...COVER_POSTS.map((_, index) => makeSentry(index))],
     events: [],
-    weather: { windSpeed: 4, windDirection: 20, gusts: 2, temperature: 14, rain: 0, visibility: 14000 },
+    // Wind travels toward 200, so a departure on runway 02 rolls into it, as it would be planned.
+    weather: { windSpeed: 4, windDirection: 200, gusts: 2, temperature: 14, rain: 0, visibility: 14000 },
     threat: { ...DEFAULT_THREAT },
     observations: { noise: 10, missRate: 0.1, latency: 0.3 },
   };

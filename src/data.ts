@@ -25,12 +25,14 @@ export function validateScenario(input: unknown): ScenarioDocument {
     choice(item.role, 'Role', ['friendly', 'hostile', 'aircraft']); choice(item.kind, 'Vehicle type', ['multirotor', 'fixed-wing', 'jet']);
     if ((item.role === 'aircraft') !== (item.kind === 'jet')) fail('Vehicle type', 'aircraft use the jet model; drones use multirotor or fixed-wing');
     vector(item.position, 'Start position'); list(item.route, 'Waypoints', 1, 256).forEach(point => vector(point, 'Waypoint'));
-    number(item.departAt, 'Departure time', 0, 2400); number(item.speed, 'Cruise speed', 0.1, 300); number(item.maxSpeed, 'Speed limit', 0.1, 300);
+    // Ceilings sit above the fastest real profile the sandbox ships: Mach 1.6 is about 536 m/s and
+    // a 40,000 ft/min climb is about 203 m/s, so neither is clipped by validation.
+    number(item.departAt, 'Departure time', 0, 2400); number(item.speed, 'Cruise speed', 0.1, 600); number(item.maxSpeed, 'Speed limit', 0.1, 600);
     if (item.speed > item.maxSpeed) fail('Cruise speed', 'must not exceed the speed limit');
-    number(item.batteryWh, 'Battery capacity', 0.01, 100000); number(item.acceleration, 'Acceleration', 0.01, 50); number(item.takeoffSpeed, 'Takeoff speed', 1, 300);
-    number(item.climbRate, 'Climb rate', 0.1, 100); number(item.runwayLength, 'Runway length', 1, 10000);
+    number(item.batteryWh, 'Battery capacity', 0.01, 100000); number(item.acceleration, 'Acceleration', 0.01, 50); number(item.takeoffSpeed, 'Takeoff speed', 1, 600);
+    number(item.climbRate, 'Climb rate', 0.1, 400); number(item.runwayLength, 'Runway length', 1, 10000);
     let previous = -1;
-    list(item.powerCurve, 'Power curve', 1, 20).forEach(rawPoint => { const point = record(rawPoint, 'Power point'); number(point.speed, 'Curve speed', 0, 300); number(point.watts, 'Curve power', 0, 1000000); if (point.speed <= previous) fail('Power curve', 'speeds must be strictly increasing'); previous = point.speed; });
+    list(item.powerCurve, 'Power curve', 1, 20).forEach(rawPoint => { const point = record(rawPoint, 'Power point'); number(point.speed, 'Curve speed', 0, 600); number(point.watts, 'Curve power', 0, 1000000); if (point.speed <= previous) fail('Power curve', 'speeds must be strictly increasing'); previous = point.speed; });
     if (item.defence !== undefined) {
       const defence = record(item.defence, 'Defence profile');
       if (item.role !== 'friendly') fail('Defence profile', 'only friendly drones can cover a station');
@@ -85,7 +87,7 @@ export function validateRun(input: unknown): RunRecord {
     list(frame.units, 'Frame vehicles', 1, 75).forEach(rawUnit => {
       const unit = record(rawUnit, 'Frame vehicle'); text(unit.id, 'Vehicle ID', 80); outputPosition(unit.position); vectorVelocity(unit.velocity);
       choice(unit.status, 'Status', ['waiting', 'rolling', 'airborne', 'complete', 'depleted', 'stopped', 'expended', 'overrun']);
-      number(unit.battery, 'Battery', 0, 100); number(unit.energy, 'Energy', 0, 100000); number(unit.capacity, 'Capacity', 0, 100000); number(unit.airspeed, 'Airspeed', 0, 500); number(unit.groundSpeed, 'Ground speed', 0, 500);
+      number(unit.battery, 'Battery', 0, 100); number(unit.energy, 'Energy', 0, 100000); number(unit.capacity, 'Capacity', 0, 100000); number(unit.airspeed, 'Airspeed', 0, 700); number(unit.groundSpeed, 'Ground speed', 0, 700);
     });
   });
   list(value.telemetry, 'Telemetry', 0, 100000).forEach(raw => {
