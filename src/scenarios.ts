@@ -1,3 +1,4 @@
+import { AIRBASE_RUNWAY, airbaseObjects, airbasePoint } from './airbase';
 import { clone, type MapKind, type MapObject, type ScenarioDocument, type Vehicle } from './types';
 
 function object(id: string, label: string, kind: MapKind, x: number, z: number, width: number, height: number, depth: number, rotation = 0): MapObject {
@@ -74,9 +75,56 @@ export function makeScenario(preset = 'successful'): ScenarioDocument {
     });
     for (let index = 0; index < 3; index++) { const jet = makeVehicle(`jet-${index}`, 'aircraft'); jet.label = `Falcon 0${index + 1}`; jet.departAt = index * 30; scenario.vehicles.push(jet); }
   }
+  if (preset === 'airbase') Object.assign(scenario, makeAirbaseScenario());
   return clone(scenario);
+}
+/**
+ * A fictional tactical air base: one runway on a 020° axis, parallel taxiways, two shelter rows,
+ * a maintenance apron and support area, inside a wooded perimeter. Three departures run against an
+ * authored intrusion. Coordinates come from the runway-local helper so the whole field stays aligned.
+ */
+function makeAirbaseScenario(): Partial<ScenarioDocument> {
+  const aircraft = [0, 1, 2].map(index => {
+    const jet = makeVehicle(`kestrel-0${index + 1}`, 'aircraft');
+    jet.label = `Kestrel 0${index + 1}`;
+    jet.position = airbasePoint(-1150 - index * 95, 0, 5);
+    jet.route = [airbasePoint(1250, 0, 320), airbasePoint(2400, 200, 760), airbasePoint(2500, -1600, 1050)];
+    jet.departAt = 8 + index * 70;
+    jet.runwayLength = AIRBASE_RUNWAY.usable;
+    return jet;
+  });
+  const sentries = [0, 1, 2].map(index => {
+    const sentry = makeVehicle(`sentry-0${index + 1}`, 'friendly', index);
+    sentry.position = airbasePoint(-200 + index * 400, 1150, 10);
+    sentry.route = [airbasePoint(-900, -500, 200), airbasePoint(900, -700, 200), airbasePoint(1500, 300, 160), airbasePoint(0, 1200, 140)];
+    sentry.departAt = 10 + index * 8;
+    return sentry;
+  });
+  const intruders = [0, 1, 2].map(index => {
+    const intruder = makeVehicle(`intruder-0${index + 1}`, 'hostile', index);
+    intruder.position = airbasePoint(400 + index * 420, -2300 - index * 120, 220);
+    intruder.route = [airbasePoint(300, 500, 180), airbasePoint(-800, 1400, 150), airbasePoint(-1600, 2600, 200)];
+    intruder.departAt = index * 10;
+    return intruder;
+  });
+  return {
+    name: '서해 전술비행단 (가상)',
+    description: 'A fictional tactical air base. One runway on a 020° axis, parallel taxiways, two shelter rows, a maintenance apron, and a wooded perimeter. Three departures run against an authored intrusion from the west.',
+    seed: 7742, duration: 240,
+    objects: airbaseObjects(),
+    vehicles: [...aircraft, ...sentries, ...intruders],
+    events: [
+      { id: 'ab-evt-1', time: 112, action: 'stop', actorId: 'intruder-01', partnerId: 'sentry-01', delaySeconds: 0, label: 'First track stopped west of the shelters' },
+      { id: 'ab-evt-2', time: 113, action: 'expend', actorId: 'sentry-01', partnerId: '', delaySeconds: 0, label: 'Sentry 01 expended' },
+      { id: 'ab-evt-3', time: 131, action: 'stop', actorId: 'intruder-02', partnerId: 'sentry-02', delaySeconds: 0, label: 'Second track stopped over the apron' },
+      { id: 'ab-evt-4', time: 158, action: 'continue', actorId: 'intruder-03', partnerId: '', delaySeconds: 0, label: 'Third track continues through the north corridor' },
+    ],
+    weather: { windSpeed: 4, windDirection: 20, gusts: 2, temperature: 14, rain: 0, visibility: 14000 },
+    observations: { noise: 10, missRate: 0.1, latency: 0.3 },
+  };
 }
 export const presets = [
   ['successful', 'Successful defense', 'Two authored encounters'], ['unsuccessful', 'Open corridor', 'Pass-through & departure hold'],
   ['battery', 'Last reserve', 'Battery exhaustion'], ['weather', 'Storm front', 'Adverse weather'], ['stress', 'Performance lab', '50 drones · 3 aircraft · 10 min'],
+  ['airbase', 'Tactical air base', 'Shelter rows · 3 departures · intrusion'],
 ] as const;

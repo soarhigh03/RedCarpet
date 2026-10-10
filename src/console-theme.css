@@ -192,3 +192,4 @@ dialog::backdrop { background: #01060ac7; backdrop-filter: blur(5px); }
 .preset-battery .preset-art { background-color:#2a271c; color:#d8c382; }
 .preset-weather .preset-art { background-color:#112b36; color:#82c6d5; }
 .preset-stress .preset-art,.recorded .preset-art { background-color:#1b2340; color:#a0b8f0; }
+.preset-airbase .preset-art { background-color:#122a2c; color:#7fd5c2; }

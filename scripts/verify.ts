@@ -4,13 +4,14 @@ import { performance } from 'node:perf_hooks';
 import { Simulation, powerAt, temperatureFactor } from '../src/simulation';
 import { makeScenario } from '../src/scenarios';
 import { buildImageScenario, exampleFootprints, objectOutline } from '../src/image-map';
+import { AIRBASE_HEADING, AIRBASE_RUNWAY, airbasePoint } from '../src/airbase';
 import { csv, validateRun, validateScenario } from '../src/data';
 import { clone, type ScenarioDocument } from '../src/types';
 
 const checks: { name: string; milliseconds: number }[] = [];
 function check(name: string, task: () => void) { const started = performance.now(); task(); checks.push({ name, milliseconds: Math.round((performance.now() - started) * 100) / 100 }); console.log(`PASS ${name}`); }
 function run(scenario: ScenarioDocument, batch = 1) { const simulation = new Simulation(scenario); while (!simulation.snapshot.finished) simulation.step(batch); return simulation; }
-check('All five example scenarios validate and survive JSON round trips', () => { for (const preset of ['successful', 'unsuccessful', 'battery', 'weather', 'stress']) { const scenario = makeScenario(preset); assert.deepEqual(validateScenario(JSON.parse(JSON.stringify(scenario))), scenario); } });
+check('All six example scenarios validate and survive JSON round trips', () => { for (const preset of ['successful', 'unsuccessful', 'battery', 'weather', 'stress', 'airbase']) { const scenario = makeScenario(preset); assert.deepEqual(validateScenario(JSON.parse(JSON.stringify(scenario))), scenario); } });
 check('Successful defense resolves both encounters and defender expenditure', () => { const simulation = run(makeScenario()); assert.equal(simulation.snapshot.logs.filter(entry => entry.kind === 'resolved').length, 3); assert.equal(simulation.snapshot.units.find(unit => unit.id === 'intruder-01')?.status, 'stopped'); assert.equal(simulation.snapshot.units.find(unit => unit.id === 'intruder-02')?.status, 'stopped'); assert.equal(simulation.snapshot.units.find(unit => unit.id === 'sentry-01')?.status, 'expended'); assert(simulation.snapshot.logs.some(entry => entry.label.includes('takeoff complete'))); });
 check('Unsuccessful script continues an intruder and delays aircraft', () => { const simulation = run(makeScenario('unsuccessful')); assert.equal(simulation.snapshot.units.find(unit => unit.id === 'falcon-01')?.departureAt, 29); assert(simulation.snapshot.logs.some(entry => entry.label.includes('continues through'))); assert.equal(simulation.snapshot.units.find(unit => unit.id === 'intruder-01')?.status, 'complete'); });
 check('Battery exhaustion terminates flights and skips conflicting encounters', () => { const simulation = run(makeScenario('battery')); assert.equal(simulation.snapshot.units.find(unit => unit.id === 'sentry-01')?.status, 'depleted'); assert.equal(simulation.snapshot.logs.filter(entry => entry.kind === 'skipped').length, 3); assert(simulation.snapshot.units.every(unit => unit.energy >= 0)); });
@@ -25,6 +26,30 @@ check('Partial recordings preserve their latest exact state and import successfu
 check('Completed recordings validate and telemetry exports include every vehicle', () => { const record = run(makeScenario()).getRecord(); validateRun(record); const output = csv(record); assert(output.startsWith('time,id,x,y,z,airspeed,groundSpeed,battery,energy,status')); assert(output.includes('"falcon-01"')); assert(output.includes('"intruder-02"')); });
 check('Invalid values and incompatible versions fail before import', () => { for (const mutate of [(scenario: any) => { scenario.schemaVersion = 2; }, (scenario: any) => { scenario.vehicles[0].speed = -1; }, (scenario: any) => { scenario.objects[0].size.x = 0; }, (scenario: any) => { scenario.vehicles[0].route = []; }, (scenario: any) => { scenario.events[0].time = 900; }, (scenario: any) => { scenario.vehicles[1].powerCurve[1].speed = 0; }]) { const scenario = makeScenario(); mutate(scenario); assert.throws(() => validateScenario(scenario)); } });
 check('50 drones and 3 aircraft complete ten simulated minutes with finite telemetry', () => { const simulation = run(makeScenario('stress'), 80); assert.equal(simulation.snapshot.time, 600); assert.equal(simulation.snapshot.units.length, 53); assert.equal(simulation.record.frames.length, 1201); assert.equal(simulation.record.telemetry.length, 601 * 53); assert(simulation.record.telemetry.every(row => [row.x, row.y, row.z, row.energy].every(Number.isFinite))); validateRun(simulation.getRecord()); });
+check('Air base layout stays on its runway axis and inside the modelled ground', () => {
+  const scenario = makeScenario('airbase');
+  const runway = scenario.objects.find(object => object.kind === 'runway')!;
+  assert.equal(runway.rotation, -AIRBASE_HEADING);
+  assert.equal(runway.size.z, AIRBASE_RUNWAY.length);
+  assert(scenario.objects.every(object => object.rotation === -AIRBASE_HEADING || object.rotation === -AIRBASE_HEADING - 90));
+  assert(scenario.objects.some(object => object.rotation === -AIRBASE_HEADING - 90));
+  assert(scenario.objects.every(object => Math.abs(object.position.x) < 3100 && Math.abs(object.position.z) < 3000));
+  const north = airbasePoint(AIRBASE_RUNWAY.length / 2, 0); const south = airbasePoint(-AIRBASE_RUNWAY.length / 2, 0);
+  assert.equal(Math.round(Math.hypot(north.x - south.x, north.z - south.z)), AIRBASE_RUNWAY.length);
+  assert.equal(Math.round(Math.atan2(north.x - south.x, south.z - north.z) * 180 / Math.PI), AIRBASE_HEADING);
+  assert.equal(new Set(scenario.objects.map(object => object.id)).size, scenario.objects.length);
+});
+check('Air base departures and the authored intrusion resolve as scripted', () => {
+  const simulation = run(makeScenario('airbase'), 20);
+  const status = (id: string) => simulation.snapshot.units.find(unit => unit.id === id)?.status;
+  for (const id of ['kestrel-01', 'kestrel-02', 'kestrel-03']) assert.equal(status(id), 'complete');
+  assert.equal(simulation.snapshot.logs.filter(entry => entry.label.includes('takeoff complete')).length, 3);
+  assert.equal(simulation.snapshot.logs.filter(entry => entry.kind === 'resolved').length, 4);
+  assert.equal(simulation.snapshot.logs.filter(entry => entry.kind === 'skipped').length, 0);
+  assert.equal(status('intruder-01'), 'stopped'); assert.equal(status('intruder-02'), 'stopped'); assert.equal(status('intruder-03'), 'complete');
+  assert.equal(status('sentry-01'), 'expended');
+  assert.deepEqual(run(makeScenario('airbase'), 1).snapshot, simulation.snapshot);
+});
 check('Fictional outlines align with the image and preserve runway orientation', () => {
   const objects = exampleFootprints(); const runway = objects.find(object => object.kind === 'runway')!;
   const outline = objectOutline(runway); const scale = 3000 / 1536;

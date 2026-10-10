@@ -33,12 +33,22 @@ The GLBs have no animation clips or separate rigged mechanisms. The simulation m
 
 ## Use the workspace
 
-1. Open **Scenarios** to select one of five examples. The performance example includes fifty drones and three aircraft over ten simulated minutes.
+1. Open **Scenarios** to select one of six examples. The performance example includes fifty drones and three aircraft over ten simulated minutes.
 2. Select a vehicle or map object in the scene explorer. Edit the inspector and choose **Apply changes**. Map objects can also be moved with the 3D translation handles. Edits reset the current run and are undoable.
 3. Vehicles have an ordered waypoint route. Coordinates use metres with X east, Y up, and negative Z north. **Add waypoints on map** appends points at 150 m altitude. All routes and altitude values can be edited numerically. Scenes with more than twelve vehicles show the selected route and avoid overlapping labels.
 4. **Add event** creates an authored timeline outcome. Launch and delay events require a waiting vehicle. Stop, expend, and continue require active participants. A supporting participant, when supplied, must be active. Conflicting events are skipped with a reason in the flight log. Events at the same time are ordered by event ID.
 5. Press Play, pause, step by 0.05 s, or change playback speed. Analysis displays telemetry for the selected vehicle. The browser pauses a live run when its tab becomes hidden.
 6. **Save project** stores the scenario in browser local storage and the latest recording in IndexedDB. **Replay** captures the current run and allows scrubbing. Scenarios and recordings can be exported/imported as JSON; CSV contains one telemetry row per vehicle per simulated second. Browser storage is local to the browser profile and site origin.
+
+## Tactical air base example
+
+**Scenarios → Tactical air base** opens a larger fictional field, **서해 전술비행단 (가상)**. It is built from the general form of a single-runway tactical air base rather than from any survey or photograph: one 2,700 m runway on a 020° axis, taxiways paralleling it end to end, crossovers and turn pads, two combed rows of aircraft shelters on their own stubs, a maintenance apron with a hangar line, a support area with tower and barracks, fuel and munitions storage, and a perimeter road through wooded ground. Eighty-four map objects in all.
+
+The layout is authored in runway-local metres in `src/airbase.ts` — `u` along the runway, `v` across it — and rotated onto the base axis, so every piece stays aligned if you change the heading. Dimensions, headings, and heights are illustrative choices, not measurements, and the field does not reconstruct a real installation.
+
+The scenario runs three jet departures from the south threshold against an authored intrusion from the west: two tracks are stopped by patrolling defenders, one defender is expended, and a third track continues through. Everything is editable afterwards — objects move with the translation handles, routes and energy profiles open in the inspector, and the event script is yours to rewrite.
+
+Runway end markings follow the object's rotation, so a runway you rotate repaints itself in the 01–36 convention. The ground boundary and access roads are drawn from the extent of the built scene, and the default camera distances, zoom limits, and shadow extent scale with it, so small and large fields both frame correctly.
 
 ## Fictional image to 3D
 

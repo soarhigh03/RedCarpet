@@ -12,6 +12,9 @@ import { IMAGE_MAP_DEPTH, IMAGE_MAP_WIDTH } from './image-map';
 import { type MapObject, type ScenarioDocument, type Snapshot, type Vec3, type Vehicle, type UnitState, isActive } from './types';
 
 const colors = { friendly: 0x27c9ab, hostile: 0xf09266, aircraft: 0x8ea6e9 };
+const TERRAIN = { width: 6200, depth: 6000 };
+/** Runway end marking for a scene rotation, in the 01–36 convention. */
+function designator(bearing: number) { const value = ((Math.round(bearing / 10) % 36) + 36) % 36; return String(value || 36).padStart(2, '0'); }
 const material = (color: number, roughness = 0.8) => new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.05 });
 function box(width: number, height: number, depth: number, color: number) { const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material(color)); mesh.castShadow = true; mesh.receiveShadow = true; return mesh; }
 function addBox(parent: THREE.Object3D, width: number, height: number, depth: number, color: number, x: number, y: number, z: number) { const mesh = box(width, height, depth, color); mesh.position.set(x, y, z); parent.add(mesh); return mesh; }
@@ -51,6 +54,8 @@ export class AirfieldScene {
   private frameTime = performance.now();
   fps = 60;
   private selectedRing: THREE.Mesh;
+  private sunlight: THREE.DirectionalLight;
+  private sceneBounds = { centerX: -215, centerZ: 0, radius: 1405 };
   private rain: THREE.Points;
   private lastSnapshot?: Snapshot;
   private assets = new SceneAssets();
@@ -68,9 +73,9 @@ export class AirfieldScene {
     this.labelLayer = document.createElement('div'); this.labelLayer.className = 'scene-labels'; this.host.append(this.labelLayer);
     this.scene.background = new THREE.Color(0xd9e4e6); this.scene.fog = new THREE.FogExp2(0xd9e4e6, 0.00007);
     this.scene.add(new THREE.HemisphereLight(0xf4fbff, 0x7a8563, 2.5));
-    const sunlight = new THREE.DirectionalLight(0xfff1dc, 3); sunlight.position.set(-900, 1800, 600); sunlight.castShadow = true;
-    sunlight.shadow.mapSize.set(2048, 2048); sunlight.shadow.camera.left = -2000; sunlight.shadow.camera.right = 2000; sunlight.shadow.camera.top = 2000; sunlight.shadow.camera.bottom = -2000; sunlight.shadow.camera.far = 6000; sunlight.shadow.normalBias = 2;
-    this.scene.add(sunlight, this.holographicGround, this.terrain, this.scenery, this.actors, this.routes, this.marks);
+    this.sunlight = new THREE.DirectionalLight(0xfff1dc, 3); this.sunlight.position.set(-900, 1800, 600); this.sunlight.castShadow = true;
+    this.sunlight.shadow.mapSize.set(2048, 2048); this.sunlight.shadow.camera.left = -2000; this.sunlight.shadow.camera.right = 2000; this.sunlight.shadow.camera.top = 2000; this.sunlight.shadow.camera.bottom = -2000; this.sunlight.shadow.camera.far = 7200; this.sunlight.shadow.normalBias = 2;
+    this.scene.add(this.sunlight, this.holographicGround, this.terrain, this.scenery, this.actors, this.routes, this.marks);
     this.camera.position.set(1180, 1200, 1450); this.controls = new OrbitControls(this.camera, this.renderer.domElement); this.controls.target.set(-130, 0, 0); this.controls.enableDamping = true; this.controls.dampingFactor = 0.08; this.controls.maxPolarAngle = Math.PI / 2.1; this.controls.minDistance = 25; this.controls.maxDistance = 6500;
     this.transform = new TransformControls(this.camera, this.renderer.domElement); this.transform.setMode('translate'); this.transform.showY = false; this.transform.setSize(0.65); this.transform.setTranslationSnap(5); this.scene.add(this.transform.getHelper());
     this.transform.addEventListener('dragging-changed', event => { this.controls.enabled = !event.value; });
@@ -93,13 +98,46 @@ export class AirfieldScene {
     this.renderer.setAnimationLoop(() => this.draw());
   }
   private buildTerrain() {
-    addBox(this.terrain, 6200, 35, 6000, 0xafb798, 0, -24, 0);
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(6200, 6000), this.groundMaterial); ground.rotation.x = -Math.PI / 2; ground.position.y = -0.1; ground.receiveShadow = true; this.terrain.add(ground);
+    addBox(this.terrain, TERRAIN.width, 35, TERRAIN.depth, 0xafb798, 0, -24, 0);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(TERRAIN.width, TERRAIN.depth), this.groundMaterial); ground.rotation.x = -Math.PI / 2; ground.position.y = -0.1; ground.receiveShadow = true; this.terrain.add(ground);
     this.terrain.add(this.terrainDetails);
-    addBox(this.terrainDetails, 26, 1, 2800, 0x8a9184, -1050, 0, 0);
-    addBox(this.terrainDetails, 2600, 1, 24, 0x8a9184, 0, 0, 1150);
-    const bounds = [new THREE.Vector3(-1350, 1, -1300), new THREE.Vector3(1150, 1, -1300), new THREE.Vector3(1150, 1, 1100), new THREE.Vector3(-1350, 1, 1100), new THREE.Vector3(-1350, 1, -1300)];
-    const perimeter = new THREE.Line(new THREE.BufferGeometry().setFromPoints(bounds), new THREE.LineDashedMaterial({ color: 0xe9eee0, dashSize: 14, gapSize: 10, transparent: true, opacity: 0.6 })); perimeter.computeLineDistances(); this.terrainDetails.add(perimeter);
+  }
+  /** Ground extent of the built scene, with each object's rotated footprint included. */
+  private measure(objects: MapObject[]) {
+    const box = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity };
+    for (const item of objects) {
+      const angle = item.rotation * Math.PI / 180; const sin = Math.abs(Math.sin(angle)); const cos = Math.abs(Math.cos(angle));
+      const spanX = item.size.x / 2 * cos + item.size.z / 2 * sin; const spanZ = item.size.x / 2 * sin + item.size.z / 2 * cos;
+      box.minX = Math.min(box.minX, item.position.x - spanX); box.maxX = Math.max(box.maxX, item.position.x + spanX);
+      box.minZ = Math.min(box.minZ, item.position.z - spanZ); box.maxZ = Math.max(box.maxZ, item.position.z + spanZ);
+    }
+    if (!Number.isFinite(box.minX)) return { minX: -600, maxX: 600, minZ: -600, maxZ: 600 };
+    return box;
+  }
+  /** The boundary and access roads follow the scene, so any field size keeps a readable surround. */
+  private buildTerrainDetails(objects: MapObject[]) {
+    dispose(this.terrainDetails); this.terrainDetails.clear();
+    const box = this.measure(objects);
+    const limitX = TERRAIN.width / 2 - 60; const limitZ = TERRAIN.depth / 2 - 60;
+    const minX = Math.max(-limitX, box.minX - 190); const maxX = Math.min(limitX, box.maxX + 190);
+    const minZ = Math.max(-limitZ, box.minZ - 190); const maxZ = Math.min(limitZ, box.maxZ + 190);
+    addBox(this.terrainDetails, 26, 1, Math.min(TERRAIN.depth - 120, maxZ - minZ + 620), 0x8a9184, Math.max(-limitX, minX - 230), 0, (minZ + maxZ) / 2);
+    addBox(this.terrainDetails, Math.min(TERRAIN.width - 120, maxX - minX + 620), 1, 24, 0x8a9184, (minX + maxX) / 2, 0, Math.min(limitZ, maxZ + 230));
+    const corners: [number, number][] = [[minX, minZ], [maxX, minZ], [maxX, maxZ], [minX, maxZ], [minX, minZ]];
+    const perimeter = new THREE.Line(new THREE.BufferGeometry().setFromPoints(corners.map(([x, z]) => new THREE.Vector3(x, 1, z))), new THREE.LineDashedMaterial({ color: 0xe9eee0, dashSize: 14, gapSize: 10, transparent: true, opacity: 0.6 })); perimeter.computeLineDistances(); this.terrainDetails.add(perimeter);
+  }
+  /** Keeps the default camera distances, shadow extent, and zoom limits proportional to the field. */
+  private frame(objects: MapObject[]) {
+    const box = this.measure(objects);
+    const centerX = (box.minX + box.maxX) / 2; const centerZ = (box.minZ + box.maxZ) / 2;
+    const radius = Math.max(400, Math.hypot(box.maxX - box.minX, box.maxZ - box.minZ) / 2);
+    const resized = Math.abs(radius - this.sceneBounds.radius) > this.sceneBounds.radius * 0.25;
+    const moved = Math.hypot(centerX - this.sceneBounds.centerX, centerZ - this.sceneBounds.centerZ) > radius * 0.3;
+    this.sceneBounds = { centerX, centerZ, radius };
+    this.controls.maxDistance = Math.max(6500, radius * 3.2);
+    const extent = Math.min(3200, Math.max(2000, radius + 300));
+    const shadow = this.sunlight.shadow.camera; shadow.left = -extent; shadow.right = extent; shadow.top = extent; shadow.bottom = -extent; shadow.updateProjectionMatrix();
+    if ((resized || moved) && this.mode !== 'follow') this.setCamera(this.mode);
   }
   private mapObject(item: MapObject) {
     const group = new THREE.Group(); const { x: width, y: height, z: depth } = item.size;
@@ -109,7 +147,7 @@ export class AirfieldScene {
         for (let index = 0; index < 15; index++) addBox(group, 3, 0.15, depth / 40, 0xe9e9d6, 0, 1.6, -depth * 0.4 + index * depth / 17.5);
         addBox(group, 1, 0.15, depth - 25, 0xc9d4c8, -width / 2 + 4, 1.6, 0); addBox(group, 1, 0.15, depth - 25, 0xc9d4c8, width / 2 - 4, 1.6, 0);
         for (const end of [-1, 1]) for (let index = -3; index <= 3; index++) if (index !== 0) addBox(group, 5, 0.2, 55, 0xeceede, index * width / 10, 1.6, end * (depth / 2 - 80));
-        this.groundText(group, '18', 0, -depth / 2 + 170, 65, 65); this.groundText(group, '36', 0, depth / 2 - 170, 65, 65);
+        this.groundText(group, designator(180 - item.rotation), 0, -depth / 2 + 170, 65, 65); this.groundText(group, designator(-item.rotation), 0, depth / 2 - 170, 65, 65);
         for (const side of [-1, 1]) for (let index = 0; index <= 30; index++) addBox(group, 2, 2, 2, 0xd5f8dc, side * (width / 2 + 4), 1, -depth / 2 + index * depth / 30);
       } else if (width < 80 || depth < 80) addBox(group, width < depth ? 1 : width - 10, 0.2, width < depth ? depth - 10 : 1, 0xcbbf7a, 0, 1.6, 0);
     } else if (item.kind === 'hangar') {
@@ -167,6 +205,7 @@ export class AirfieldScene {
   setScenario(scenario: ScenarioDocument) {
     this.wireframeMaterials.restore();
     this.scenario = scenario; this.transform.detach();
+    this.buildTerrainDetails(scenario.objects); this.frame(scenario.objects);
     this.terrainDetails.visible = !scenario.referenceMap;
     this.referencePlane.visible = Boolean(scenario.referenceMap?.visible && this.assets.referenceMap);
     for (const group of [this.scenery, this.actors, this.routes]) { dispose(group); group.clear(); }
@@ -217,8 +256,9 @@ export class AirfieldScene {
   setCamera(mode: string) {
     this.mode = mode;
     this.host.closest('.viewport-wrap')?.classList.toggle('inspect-view', mode === 'follow');
-    if (mode === 'overhead') { this.camera.position.set(-130, 3400, 1); this.controls.target.set(-130, 0, 0); }
-    if (mode === 'orbit') { this.camera.position.set(1180, 1200, 1450); this.controls.target.set(-130, 0, 0); }
+    const { centerX, centerZ, radius } = this.sceneBounds;
+    if (mode === 'overhead') { this.camera.position.set(centerX, radius * 2.42, centerZ + 1); this.controls.target.set(centerX, 0, centerZ); }
+    if (mode === 'orbit') { const distance = radius * 1.62; this.camera.position.set(centerX + distance * 0.57, distance * 0.52, centerZ + distance * 0.63); this.controls.target.set(centerX, 0, centerZ); }
     this.controls.update();
   }
   update(snapshot: Snapshot) { this.lastSnapshot = snapshot; this.unitStates = snapshot.units; }
