@@ -6,9 +6,9 @@ import { makeScenario } from '../src/scenarios';
 import { buildImageScenario, exampleFootprints, objectOutline } from '../src/image-map';
 import { AIRBASE_HEADING, AIRBASE_RUNWAY, airbasePoint } from '../src/airbase';
 import { AIRBASE_AIM, F35A, rollWave } from '../src/scenarios';
-import { contact, DEFAULT_THREAT, I79_RADAR, interceptPoint } from '../src/defence';
+import { closestApproach, contact, crossingPoint, DEFAULT_THREAT, URAD_INDUSTRIAL_V2 } from '../src/defence';
 import { csv, validateRun, validateScenario } from '../src/data';
-import { clone, type ScenarioDocument } from '../src/types';
+import { clone, STEP, type ScenarioDocument } from '../src/types';
 
 const checks: { name: string; milliseconds: number }[] = [];
 function check(name: string, task: () => void) { const started = performance.now(); task(); checks.push({ name, milliseconds: Math.round((performance.now() - started) * 100) / 100 }); console.log(`PASS ${name}`); }
@@ -87,34 +87,48 @@ check('Departures fly the F-35A figures and rotate inside the runway', () => {
   assert(rotation > 0 && rotation < jet.runwayLength, `rotates after ${Math.round(rotation)} m, inside the usable runway`);
   assert(Math.abs(rotation - roll) < 120, 'headwind shortens the roll rather than transforming it');
 });
-check('Radar envelope follows the published I-79 figures', () => {
-  const origin = { x: 0, y: 60, z: 0 };
-  const north = (metres: number, height = 60) => ({ x: 0, y: height, z: -metres });
-  assert.equal(I79_RADAR.range, 240); assert.equal(I79_RADAR.horizontalFov, 120); assert.equal(I79_RADAR.verticalFov, 30);
-  assert(contact(origin, 0, I79_RADAR, north(239)).seen);
-  assert(!contact(origin, 0, I79_RADAR, north(241)).seen, 'beyond the measurement range');
-  assert(!contact(origin, 0, I79_RADAR, north(0.2)).seen, 'inside the minimum range');
-  // +/-60 degrees horizontally: a contact due east is on the edge of a north-facing sensor.
-  assert(contact(origin, 0, I79_RADAR, { x: 100, y: 60, z: -58 }).seen);
-  assert(!contact(origin, 0, I79_RADAR, { x: 100, y: 60, z: 0 }).seen, 'past the horizontal edge');
-  // +/-15 degrees vertically: 100 m out, anything above about 26.8 m of separation is missed.
-  assert(contact(origin, 0, I79_RADAR, north(100, 60 + 26)).seen);
-  assert(!contact(origin, 0, I79_RADAR, north(100, 60 + 28)).seen, 'above the elevation limit');
-  assert(!contact(origin, 0, I79_RADAR, north(100, 60 - 28)).seen, 'below the elevation limit');
+check('Radar envelope follows the published uRAD Industrial v2.0 figures', () => {
+  const origin = { x: 0, y: 20, z: 0 };
+  const north = (metres: number, height = 20) => ({ x: 0, y: height, z: -metres });
+  assert.equal(URAD_INDUSTRIAL_V2.range, 50); assert.equal(URAD_INDUSTRIAL_V2.horizontalFov, 160);
+  assert.equal(URAD_INDUSTRIAL_V2.verticalFov, 160); assert.equal(URAD_INDUSTRIAL_V2.velocityRange, 45);
+  assert(contact(origin, 0, URAD_INDUSTRIAL_V2, north(49)).seen);
+  assert(!contact(origin, 0, URAD_INDUSTRIAL_V2, north(51)).seen, 'beyond the measurement range');
+  assert(!contact(origin, 0, URAD_INDUSTRIAL_V2, north(0.2)).seen, 'inside the minimum range');
+  // +/-80 degrees: nearly hemispherical, blind only in a 20 degree wedge directly behind.
+  assert(contact(origin, 0, URAD_INDUSTRIAL_V2, { x: 28, y: 20, z: -10 }).seen, 'wide of the boresight but inside 80 degrees');
+  assert(!contact(origin, 0, URAD_INDUSTRIAL_V2, { x: 3, y: 20, z: 30 }).seen, 'behind the sensor');
+  assert(contact(origin, 0, URAD_INDUSTRIAL_V2, north(10, 20 + 30)).seen, 'steep elevation is inside 80 degrees');
   // Reported range is quantised to the resolution cell rather than reported exactly.
-  const reading = contact(origin, 0, I79_RADAR, north(100));
-  assert.equal(reading.measured, Math.round(100 / 0.39) * 0.39);
-  assert(Math.abs(reading.measured - 100) <= I79_RADAR.rangeResolution / 2);
+  const reading = contact(origin, 0, URAD_INDUSTRIAL_V2, north(30));
+  assert.equal(reading.measured, Math.round(30 / URAD_INDUSTRIAL_V2.rangeResolution) * URAD_INDUSTRIAL_V2.rangeResolution);
+  // A contact closing faster than the module measures is held, but its motion is not resolved.
+  const quick = contact(origin, 0, URAD_INDUSTRIAL_V2, north(40), { x: 0, y: 0, z: 60 });
+  assert(quick.seen && !quick.solvable, 'seen at 60 m/s closing, past the 45 m/s limit');
+  const steady = contact(origin, 0, URAD_INDUSTRIAL_V2, north(40), { x: 0, y: 0, z: 30 });
+  assert(steady.seen && steady.solvable);
+  assert.equal(Math.round(steady.closing), 30);
 });
-check('A lead intercept is solved, and an uncatchable target reports none', () => {
-  const origin = { x: 0, y: 50, z: 0 };
-  const solution = interceptPoint(origin, 40, { x: 0, y: 50, z: -400 }, { x: 0, y: 0, z: 40 });
-  assert(solution, 'a head-on closure has a solution');
-  assert.equal(Math.round(solution!.time), 5);
-  assert.equal(Math.round(solution!.point.z), -200);
-  assert.equal(interceptPoint(origin, 20, { x: 0, y: 50, z: -400 }, { x: 0, y: 0, z: -80 }), undefined);
+check('The square-on crossing point is solved, and a late dash is refused', () => {
+  const origin = { x: 30, y: 20, z: 0 };
+  // A target flying due north past a sentry 30 m to its east: the square-on point is abeam.
+  const crossing = crossingPoint(origin, 42, 45, { x: 0, y: 20, z: 40 }, { x: 0, y: 0, z: -20 });
+  assert(crossing, 'a target still approaching has a crossing');
+  assert.equal(Math.round(crossing!.point.z), 0, 'abeam the sentry');
+  assert.equal(Math.round(crossing!.dash), 30, 'the dash is the perpendicular, not the range');
+  assert.equal(Math.round(crossing!.targetTime * 10) / 10, 2);
+  assert(crossing!.reachable, '30 m at 45 m/s² inside 2 s');
+  // Straight overhead: the shortest way onto the track is a vertical climb.
+  const above = crossingPoint({ x: 0, y: 0, z: 0 }, 42, 45, { x: 0, y: 40, z: 60 }, { x: 0, y: 0, z: -20 });
+  assert.equal(Math.round(above!.point.x), 0); assert.equal(Math.round(above!.point.z), 0);
+  assert.equal(Math.round(above!.dash), 40, 'a vertical dash');
+  assert.equal(crossingPoint(origin, 42, 45, { x: 0, y: 20, z: -40 }, { x: 0, y: 0, z: -20 }), undefined, 'already past');
+  assert(!crossingPoint({ x: 400, y: 20, z: 0 }, 42, 45, { x: 0, y: 20, z: 40 }, { x: 0, y: 0, z: -20 })!.reachable, '400 m in 2 s is not on');
+  // Swept over the step, a fast pass cannot slip between two position samples.
+  const slip = closestApproach({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, { x: -4, y: 0, z: 0 }, { x: 160, y: 0, z: 0 }, STEP);
+  assert.equal(Math.round(slip), 0, 'passes straight through, and is caught');
 });
-check('Sentries cover the runway at 100 m without ever waiting in a pod', () => {
+check('Sentries cover the aim point inside their envelope and never wait in a pod', () => {
   const scenario = makeScenario('airbase');
   const sentries = scenario.vehicles.filter(vehicle => vehicle.defence);
   assert.equal(sentries.length, 8);
@@ -125,31 +139,35 @@ check('Sentries cover the runway at 100 m without ever waiting in a pod', () => 
     assert.equal(sentry.departAt, 0, 'already covering when the run starts');
     assert.deepEqual(sentry.position, defence.station);
     assert(pods.has(defence.podId), 'every sentry has a charging pod on the map');
-    assert.deepEqual(defence.sensor, I79_RADAR);
-    const offset = Math.hypot(defence.station.x - AIRBASE_AIM.x, defence.station.z - AIRBASE_AIM.z);
-    assert(offset < defence.sensor.range * 4, 'posted within reach of the ground it covers');
-  }
-  // 100 m off the centreline: the station is that far from the runway axis through the aim point.
-  const axis = AIRBASE_HEADING * Math.PI / 180;
-  for (const sentry of sentries) {
-    const east = sentry.defence!.station.x - AIRBASE_AIM.x; const north = sentry.defence!.station.z - AIRBASE_AIM.z;
-    assert.equal(Math.round(Math.abs(east * Math.cos(axis) + north * Math.sin(axis))), 100);
+    assert.deepEqual(defence.sensor, URAD_INDUSTRIAL_V2);
+    // The whole point of the retune: a 50 m sensor has to reach the ground it guards. Measure the
+    // slant to the runway centreline abeam the post, not the distance along the runway to the aim.
+    const axis = AIRBASE_HEADING * Math.PI / 180;
+    const east = defence.station.x - AIRBASE_AIM.x; const north = defence.station.z - AIRBASE_AIM.z;
+    const across = Math.abs(east * Math.cos(axis) + north * Math.sin(axis));
+    const slant = Math.hypot(across, defence.station.y - AIRBASE_AIM.y);
+    assert(slant <= defence.sensor.range, `centreline is ${Math.round(slant)} m away, inside the ${defence.sensor.range} m envelope`);
+    // A dash has to be possible inside the time the envelope buys.
+    assert(0.5 * sentry.acceleration * (defence.sensor.range / 40) ** 2 > defence.sensor.range / 2, 'agile enough to cross its own bubble');
   }
   const first = new Simulation(scenario);
   assert.equal(first.snapshot.units.find(unit => unit.id === sentries[0].id)?.status, 'airborne');
 });
-check('The screen detects, assigns the nearest free sentry, and hard kills', () => {
+check('Each drone decides for itself, dashes square on, and takes the target down', () => {
   const simulation = run(makeScenario('airbase'), 20);
   const scenario = makeScenario('airbase');
   const hostiles = scenario.vehicles.filter(vehicle => vehicle.role === 'hostile').map(vehicle => vehicle.id);
   const threats = simulation.snapshot.units.filter(unit => hostiles.includes(unit.id));
   assert.equal(threats.length, 8);
-  assert.equal(threats.filter(unit => unit.status === 'stopped').length, 8, 'the default wave is held');
-  assert.equal(threats.filter(unit => unit.status === 'complete').length, 0, 'nothing leaks through');
+  const stopped = threats.filter(unit => unit.status === 'stopped').length;
+  const leaked = threats.filter(unit => unit.status === 'complete').length;
+  assert.equal(stopped + leaked, 8);
+  assert(stopped >= 5, `a 50 m screen holds most of the default wave, held ${stopped}`);
+  assert(leaked > 0, 'and a 50 m envelope does not hold all of it');
   const shooters = simulation.snapshot.units.filter(unit => unit.kills > 0);
-  assert(shooters.length >= 3, 'more than one sentry is drawn in');
-  assert.equal(shooters.reduce((sum, unit) => sum + unit.kills, 0), 8);
-  // Every kill resolves inside the engagement range, and the sentry goes back to its post.
+  assert(shooters.length >= 2, 'more than one drone is drawn in');
+  assert.equal(shooters.reduce((sum, unit) => sum + unit.kills, 0), stopped);
+  // Every takedown resolves inside the engagement range, and the drone goes back to its post.
   const engageRange = scenario.vehicles.find(vehicle => vehicle.defence)!.defence!.engageRange;
   for (const entry of simulation.snapshot.logs.filter(log => log.kind === 'resolved')) {
     assert(Number(entry.label.match(/at ([\d.]+) m$/)![1]) <= engageRange);

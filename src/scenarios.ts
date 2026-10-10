@@ -1,5 +1,5 @@
 import { AIRBASE_RUNWAY, airbaseObjects, airbasePoint, coverPost, COVER_POSTS } from './airbase';
-import { DEFAULT_THREAT, I79_RADAR, rollThreats } from './defence';
+import { DEFAULT_THREAT, URAD_INDUSTRIAL_V2, rollThreats } from './defence';
 import { clone, type MapKind, type MapObject, type ScenarioDocument, type ThreatPlan, type Vehicle } from './types';
 
 function object(id: string, label: string, kind: MapKind, x: number, z: number, width: number, height: number, depth: number, rotation = 0): MapObject {
@@ -118,9 +118,11 @@ export function makeSentry(index: number): Vehicle {
   sentry.position = clone(post.station);
   sentry.route = [clone(post.station)];
   sentry.departAt = 0;
-  sentry.speed = 42; sentry.maxSpeed = 60; sentry.climbRate = 16; sentry.batteryWh = 420;
+  // A 50 m envelope leaves about a second to act, so the dash is all acceleration and no cruise.
+  // 45 m/s² is roughly 4.6 g — high, but inside what a small interceptor quad pulls.
+  sentry.speed = 42; sentry.maxSpeed = 60; sentry.climbRate = 40; sentry.acceleration = 45; sentry.batteryWh = 420;
   sentry.powerCurve = [{ speed: 0, watts: 240 }, { speed: 20, watts: 380 }, { speed: 42, watts: 760 }, { speed: 60, watts: 1450 }];
-  sentry.defence = { station: clone(post.station), heading: post.heading, sensor: { ...I79_RADAR }, engageRange: 12, podId: post.podId, expendOnKill: false };
+  sentry.defence = { station: clone(post.station), heading: post.heading, sensor: { ...URAD_INDUSTRIAL_V2 }, engageRange: 10, podId: post.podId, expendOnKill: false };
   return sentry;
 }
 /** One ramming drone of a rolled wave. Course, speed, altitude and release time come from the plan. */

@@ -37,28 +37,32 @@ The GLBs have no animation clips or separate rigged mechanisms. The simulation m
 
 The point of the sandbox is where sentries stand and what gets through, not building scenery. The tactical air base scenario ships a screen of eight sentry drones and a rolled wave of ramming drones to run at it.
 
-**Sentries are already covering.** They do not wait in a pod and launch when something shows up; each one is airborne on its station before the run starts, 100 m off the runway centreline, spaced along the departure end. Every post has a charging pod on the ground behind it, clear of the pavement. The pods are physical map objects and each sentry references one, which is the hook for the charging-timing mechanism; nothing recharges yet.
+**Sentries are already covering.** They do not wait in a pod and launch when something shows up; each one is airborne on its station before the run starts. Every post has a charging pod on the ground, clear of the pavement. The pods are physical map objects and each sentry references one, which is the hook for the charging-timing mechanism; nothing recharges yet.
 
-**What a sentry can see** is the whole question. The envelope defaults to the published figures for the Ainstein I-79 automotive 4D imaging radar:
+**What a sentry can see** is the whole question. The envelope defaults to the published uRAD Industrial v2.0 figures (Anteral):
 
 | | |
 | --- | --- |
-| Frequency | 76–77 GHz |
-| Measurement range | 0.5–240 m |
-| Range accuracy | ±0.1 m |
-| Range resolution | 0.39 m |
-| Horizontal field | ±60°, 120° total |
-| Vertical field | ±15°, 30° total |
+| Frequency | 60–64 GHz |
+| Detection range | 50 m on a small drone |
+| Field of view | 160° × 160° |
+| Distance accuracy | ±1 mm |
+| Velocity measured to | 45 m/s, ±0.15 m/s |
+| Angle accuracy | 1° |
 
-A contact exists only inside that cone. The ±15° vertical band in particular decides a great deal: against a sentry at 60 m, a drone running in at 150 m is outside the band at every range the radar reaches, and is simply never seen until it descends. Reported range is quantised to the 0.39 m resolution cell rather than read off exactly. Each post is given a different boresight so the eight together leave no blind bearing, while any one of them still sees only its own sector — which is what makes placement matter.
+The datasheet quotes maximum distance by target type — 70 m for a car, 40 m for a person — so 50 m is used here for a drone, between the two. Range resolution is not published separately and is set at the order of the accuracy figure.
 
-**The engagement** runs every step: each sentry reports what its own radar holds; a detected drone is handed to the nearest sentry that is not already committed; that sentry flies a lead intercept, solving for where the drone will be rather than where it is, yawing to keep the contact in its cone as it closes; and the hard kill resolves when the drone is inside both the envelope and the engagement range. The sentry then returns to its station. Pure pursuit loses every tail chase at these speeds, so the lead solution is also what decides assignment — a closer sentry with no intercept solution gives way to one that can actually make the meeting.
+Two numbers dominate everything. **50 m is a bubble, not a line**: a sentry can only cover what it is nearly sitting on, which is why the posts stand 40 m off the centreline at 20 m rather than standing off, and why their spacing along the runway is set so neighbouring bubbles overlap. **45 m/s is the velocity ceiling**, and the intercept needs the target's velocity, so a drone closing faster than that is held on the radar but cannot be solved for and is reported as an unresolved track. The 160° field, by contrast, barely constrains anything: it is close to hemispherical, blind only in the 20° wedge directly behind, so the posts face outward across the approach rather than inward at the runway they guard.
+
+**The engagement is decided by each drone on its own.** There is no shared picture. Every step a sentry reads its own radar, classifies what it holds, and if it holds a hostile track *and is the closest of the sentries that also hold it*, it works out where that track crosses it — the foot of the perpendicular from itself onto the line the target is flying — and checks it can get there before the target does. Over a 50 m envelope there is about a second to act, so the move is a square-on dash onto the track rather than a pursuit curve; when the target is passing directly overhead or underneath, that dash is straight up or down. It then waits on the track and the takedown resolves on contact. The sentry returns to its post afterwards.
 
 A drone that flies its whole course without being stopped reached what it was aimed at, and is counted as a leak.
 
 **Rolling an attack.** The **Threat** panel holds the wave recipe: how many, how fast, how high, how far out they are released, and how wide the release window is. Rolling gives every drone its own bearing, speed, altitude, release time, weaving run-in, and impact point from the seed. The same plan and seed always produce the same wave, so you can move a sentry and replay the identical attack. The rolled drones become ordinary editable vehicles in the scenario.
 
-The scoreboard over the view tracks inbound, holding, tracked, engaging, stopped, and leaked. The default wave of eight is held in full; a wave of fourteen at 45–75 m/s released inside forty seconds saturates the same screen and about half get through. That gap is the thing to tune.
+The scoreboard over the view tracks inbound, holding, tracked, engaging, stopped, and leaked. The default wave of eight loses six; a wave of the same shape at 18–30 m/s loses seven; waves carrying drones that close faster than 45 m/s lose two or three, with the rest logged as unresolved tracks and never engaged. That spread is the thing to tune — it is almost entirely a consequence of the two sensor numbers above.
+
+Catching anything at all at 50 m also costs agility. The sentries are specified at 45 m/s², about 4.6 g, which is high but inside what a small interceptor quad pulls; at the 7 m/s² a general-purpose drone has, a sentry covers 5 m in the second its sensor buys it and never reaches anything.
 
 ## The departures
 
@@ -114,16 +118,16 @@ Outlines become ordinary map objects, so the existing inspector, translation han
 
 ## Models and limits
 
-The base, the sentries, and the hostile drones are fictional. The departures are not: they fly published F-35A figures, with the unpublished ground roll derived from thrust to weight and labelled as such. The supplied jet artwork is a generic airframe and does not establish aircraft performance data. Flight uses a fixed 0.05 s step, direct waypoint motion, limited climb, and educational wind drift. Energy is the integral of the user-defined airspeed/power curve. Available capacity decreases by 0.8% per degree below 20°C, with a 55% floor; this is an adjustable-model assumption, not a measured battery specification. Depletion ends the modeled flight at its current location.
+The base, the sentries, and the hostile drones are fictional. The departures are not: they fly published F-35A figures, with the unpublished ground roll derived from thrust to weight and labelled as such. The supplied jet artwork is a generic airframe and does not establish aircraft performance data. Flight uses a fixed 0.05 s step, direct waypoint motion, limited climb, and educational wind drift. Every airframe accelerates and brakes at its own figure rather than a shared constant; routes are flown through rather than braked into, but a drone holding a point brakes into it under its own acceleration instead of snapping to a halt, and holding a point in wind costs the airspeed needed to cancel the drift. Contact between two movers is swept over each step rather than sampled at its end, so a fast pass cannot jump an engagement radius. Energy is the integral of the user-defined airspeed/power curve. Available capacity decreases by 0.8% per degree below 20°C, with a 55% floor; this is an adjustable-model assumption, not a measured battery specification. Depletion ends the modeled flight at its current location.
 
 Observations are synthetic, seeded noisy positions with configurable loss and delay. Rain and visibility increase loss through a toy model. They are not radar waveforms.
 
-The sentry envelope borrows published Ainstein I-79 figures because they are a concrete, honest set of numbers to reason about coverage with. That is the whole extent of the borrowing: detection is a cone-and-range test against those figures, and everything after a contact — which sentry is sent, the lead-pursuit solution, the modelled outcome — is a teaching abstraction with no basis in how any real system behaves. There is no guidance, fire control, waveform, device interface, or targeting firmware here, and that radar is an automotive and industrial part, not a counter-drone product. Encounter outcomes resolve from the modelled geometry, and authored timeline events remain available alongside it. The separate hardware report is available from **Hardware lab**.
+The sentry envelope borrows published uRAD Industrial v2.0 figures because they are a concrete, honest set of numbers to reason about coverage with. That is the whole extent of the borrowing: detection is a cone-and-range test against those figures, and everything after a contact — which drone goes, the crossing-point geometry, the modelled outcome — is a teaching abstraction with no basis in how any real system behaves. There is no guidance, fire control, waveform, device interface, or targeting firmware here, and that radar is an industrial sensing module, not a counter-drone product. Encounter outcomes resolve from the modelled geometry, and authored timeline events remain available alongside it. The separate hardware report is available from **Hardware lab**.
 
 ## Data and verification
 
 `ScenarioDocument` and `RunRecord` use schema version 1. Runs include a scenario snapshot and simulator version. Replay uses recorded 0.5 s frames with visual interpolation; telemetry is sampled each second. Pause and playback rates do not change simulation steps. Identical scenario and seed reproduce results within this simulator version. Invalid imports are rejected before replacing the open scenario.
 
-`npm run verify` checks representative outcomes, conflict handling, takeoff failures, energy accounting, data validation, repeatability, and the ten-minute performance case. For the engagement it checks the cone and range envelope against each published I-79 figure, the lead-intercept solution including the case with no solution, that sentries start covering at 100 m with a pod each, that the default wave is held with every kill inside engagement range, that a rolled wave is reproducible from its plan, and that a faster saturating wave gets through. It writes its result to the sibling outputs directory. Browser rendering, persistence, downloads, and editing are separately checked through the visible UI.
+`npm run verify` checks representative outcomes, conflict handling, takeoff failures, energy accounting, data validation, repeatability, and the ten-minute performance case. For the engagement it checks the envelope against each published uRAD figure including the velocity ceiling, the crossing-point geometry — the abeam case, the straight-overhead case that resolves to a vertical dash, a target already past, a dash too far to make — the swept contact test that stops a fast pass slipping between two samples, that the runway centreline sits inside each sentry's envelope and that each is agile enough to cross its own bubble, that the default wave is mostly but not entirely held with every takedown inside engagement range, that a rolled wave is reproducible from its plan, and that a faster saturating wave gets through. It writes its result to the sibling outputs directory. Browser rendering, persistence, downloads, and editing are separately checked through the visible UI.
 
 The application targets desktop Chrome and Edge with WebGL2. All calculations and user data remain in the browser. The source uses TypeScript, Vite, and Three.js; it has no server API or environment secrets. Fonts load from Google Fonts with a system-font fallback. Hosting access is managed by your chosen provider.

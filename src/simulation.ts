@@ -1,7 +1,14 @@
-import { bearingOf, contact, interceptPoint } from './defence';
+import { bearingOf, closestApproach, contact, crossingPoint } from './defence';
 import { clone, isActive, SIMULATOR_VERSION, STEP, type ScenarioDocument, type Snapshot, type UnitState, type RunRecord, type Vehicle, type Vec3, type Observation } from './types';
 
 const separation = (first: Vec3, second: Vec3) => Math.hypot(second.x - first.x, second.y - first.y, second.z - first.z);
+/** Fastest you can be going and still stop in the distance left, at this airframe's acceleration. */
+const approachSpeed = (distance: number, acceleration: number) => Math.sqrt(Math.max(0, 2 * acceleration * distance));
+/** Rate-limited airspeed change, so a drone accelerates and brakes at its own figure instead of snapping. */
+function settle(current: number, wanted: number, acceleration: number) {
+  const step = acceleration * STEP;
+  return current < wanted ? Math.min(wanted, current + step) : Math.max(wanted, current - step);
+}
 
 export function temperatureFactor(temperature: number) { return Math.max(0.55, Math.min(1, 1 - Math.max(0, 20 - temperature) * 0.008)); }
 export function powerAt(vehicle: Vehicle, speed: number) {
@@ -22,6 +29,8 @@ export class Simulation {
   private randomState: number;
   private nextEvent = 0;
   private pending: Observation[] = [];
+  /** Contacts already reported as moving too fast to resolve, so the warning is logged once each. */
+  private unresolved = new Set<string>();
   constructor(scenario: ScenarioDocument) {
     this.scenario = clone(scenario); this.scenario.events.sort((first, second) => first.time - second.time || first.id.localeCompare(second.id));
     this.randomState = scenario.seed >>> 0;
@@ -132,8 +141,10 @@ export class Simulation {
     }
     const offset = { x: destination.x - unit.position.x, y: destination.y - unit.position.y, z: destination.z - unit.position.z };
     const distance = Math.hypot(offset.x, offset.y, offset.z);
+    // Every airframe accelerates at its own figure. Waypoints are turn points, so a route is flown
+    // through rather than braked into; only a sentry holding a point has to stop.
     const targetSpeed = Math.min(vehicle.speed, vehicle.maxSpeed);
-    unit.airspeed = Math.min(targetSpeed, unit.airspeed + (vehicle.kind === 'jet' ? vehicle.acceleration : 12) * STEP);
+    unit.airspeed = settle(unit.airspeed, targetSpeed, vehicle.acceleration);
     if (distance < Math.max(12, (unit.airspeed + Math.hypot(wind.x, wind.z)) * STEP * 2)) { unit.waypoint++; return; }
     const vertical = Math.max(-vehicle.climbRate, Math.min(vehicle.climbRate, offset.y / distance * unit.airspeed));
     const horizontalDistance = Math.hypot(offset.x, offset.z);
@@ -150,25 +161,28 @@ export class Simulation {
   private cover(unit: UnitState, vehicle: Vehicle, wind: Vec3) {
     const defence = vehicle.defence!;
     const chase = unit.task === 'intercept' ? this.snapshot.units.find(item => item.id === unit.targetId) : undefined;
-    // Lead the target. Flying at where it is now loses every tail chase against a comparable speed.
-    const lead = chase && interceptPoint(unit.position, Math.min(vehicle.speed, vehicle.maxSpeed), chase.position, chase.velocity);
-    const destination = chase ? lead?.point ?? chase.position : defence.station;
+    const cruise = Math.min(vehicle.speed, vehicle.maxSpeed);
+    // Dash square onto the target's track rather than chasing it. Over a 50 m envelope there is no
+    // time for a pursuit curve; the shortest useful move is straight onto the line it is flying.
+    const crossing = chase && crossingPoint(unit.position, cruise, vehicle.acceleration, chase.position, chase.velocity);
+    const destination = chase ? crossing?.point ?? chase.position : defence.station;
     const offset = { x: destination.x - unit.position.x, y: destination.y - unit.position.y, z: destination.z - unit.position.z };
     const distance = Math.hypot(offset.x, offset.y, offset.z);
     const horizontal = Math.hypot(offset.x, offset.z);
-    const arrived = Math.max(3, unit.airspeed * STEP * 2);
-    if (!chase && distance <= arrived) {
+    if (!chase && distance <= Math.max(0.5, unit.airspeed * STEP)) {
       unit.position = clone(defence.station); unit.heading = defence.heading;
-      unit.velocity = { x: 0, y: 0, z: 0 }; unit.airspeed = 0; unit.groundSpeed = 0;
+      // Holding a point in wind is not free: it costs the airspeed needed to cancel the drift.
+      unit.velocity = { x: 0, y: 0, z: 0 }; unit.airspeed = Math.hypot(wind.x, wind.z); unit.groundSpeed = 0;
       if (unit.task === 'return') { unit.task = 'hold'; this.log('flight', `${vehicle.label}: back on station`, unit.id); }
       return;
     }
-    // A multirotor can yaw independently of its track, so the radar stays on the target while the
-    // airframe translates toward the meeting point. The hard kill needs the target inside the cone.
+    // A multirotor yaws independently of its track, so the radar stays on the target while the
+    // airframe translates onto the crossing point.
     if (chase) unit.heading = bearingOf(chase.position.x - unit.position.x, chase.position.z - unit.position.z);
     else if (horizontal > 0.5) unit.heading = bearingOf(offset.x, offset.z);
-    const targetSpeed = Math.min(vehicle.speed, vehicle.maxSpeed);
-    unit.airspeed = Math.min(targetSpeed, unit.airspeed + 14 * STEP);
+    // Braking is rate limited too, so the drone arrives stopped instead of snapping to a halt.
+    const targetSpeed = Math.min(cruise, approachSpeed(distance, vehicle.acceleration));
+    unit.airspeed = settle(unit.airspeed, targetSpeed, vehicle.acceleration);
     const vertical = Math.max(-vehicle.climbRate, Math.min(vehicle.climbRate, distance ? offset.y / distance * unit.airspeed : 0));
     const horizontalSpeed = Math.sqrt(Math.max(0, unit.airspeed ** 2 - vertical ** 2));
     unit.velocity = {
@@ -188,60 +202,78 @@ export class Simulation {
   private engage() {
     const vehicles = this.scenario.vehicles;
     const sentries: { unit: UnitState; vehicle: Vehicle }[] = [];
-    const threats: UnitState[] = [];
+    const movers: { unit: UnitState; hostile: boolean }[] = [];
     this.snapshot.units.forEach((unit, index) => {
       const vehicle = vehicles[index];
       if (vehicle.defence && isActive(unit.status)) sentries.push({ unit, vehicle });
-      else if (vehicle.role === 'hostile' && isActive(unit.status)) threats.push(unit);
+      if (isActive(unit.status)) movers.push({ unit, hostile: vehicle.role === 'hostile' });
     });
     if (!sentries.length) return;
-    const detected = new Set<string>();
-    for (const { unit, vehicle } of sentries) {
-      const sensor = vehicle.defence!.sensor;
+
+    // Each drone reads its own radar. There is no shared picture: a contact only exists for the
+    // sentries that hold it themselves, which is what makes a 50 m envelope a local problem.
+    const held = new Map<string, { unit: UnitState; vehicle: Vehicle; range: number; solvable: boolean }[]>();
+    for (const sentry of sentries) {
+      const sensor = sentry.vehicle.defence!.sensor;
       let nearest = ''; let shortest = Infinity; let count = 0;
-      for (const threat of threats) {
-        const reading = contact(unit.position, unit.heading, sensor, threat.position);
+      for (const mover of movers) {
+        if (mover.unit.id === sentry.unit.id) continue;
+        const reading = contact(sentry.unit.position, sentry.unit.heading, sensor, mover.unit.position, mover.unit.velocity);
         if (!reading.seen) continue;
-        count++; detected.add(threat.id);
-        if (reading.measured < shortest) { shortest = reading.measured; nearest = threat.id; }
+        count++;
+        // What the sensor returns is a track. Whether it is a threat is the drone's own call, and
+        // here that call is the role it was authored with rather than any classifier.
+        if (!mover.hostile) continue;
+        if (reading.measured < shortest) { shortest = reading.measured; nearest = mover.unit.id; }
+        const holders = held.get(mover.unit.id) ?? [];
+        holders.push({ ...sentry, range: reading.range, solvable: reading.solvable });
+        held.set(mover.unit.id, holders);
       }
-      unit.tracking = nearest; unit.trackCount = count;
+      sentry.unit.tracking = nearest; sentry.unit.trackCount = count;
     }
+
     for (const { unit } of sentries) {
       if (unit.task !== 'intercept') continue;
       const target = this.snapshot.units.find(item => item.id === unit.targetId);
-      if (!target || !isActive(target.status)) { unit.targetId = ''; unit.task = 'return'; }
+      const stillHeld = held.get(unit.targetId)?.some(holder => holder.unit.id === unit.id);
+      if (!target || !isActive(target.status) || !stillHeld) { unit.targetId = ''; unit.task = 'return'; }
     }
+
     const committed = new Set(sentries.map(sentry => sentry.unit.targetId).filter(Boolean));
-    for (const threat of threats) {
-      if (!detected.has(threat.id) || committed.has(threat.id)) continue;
-      // Nearest sentry goes, but a sentry with no intercept solution would only tail chase, so one
-      // that can actually meet the run-in wins over a closer one that cannot.
-      let chosen: { unit: UnitState; vehicle: Vehicle } | undefined; let shortest = Infinity;
-      let fallback: { unit: UnitState; vehicle: Vehicle } | undefined; let nearest = Infinity;
-      for (const sentry of sentries) {
-        if (sentry.unit.task === 'intercept') continue;
-        const gap = separation(sentry.unit.position, threat.position);
-        if (gap < nearest) { nearest = gap; fallback = sentry; }
-        const speed = Math.min(sentry.vehicle.speed, sentry.vehicle.maxSpeed);
-        if (!interceptPoint(sentry.unit.position, speed, threat.position, threat.velocity)) continue;
-        if (gap < shortest) { shortest = gap; chosen = sentry; }
+    for (const [targetId, holders] of held) {
+      if (committed.has(targetId)) continue;
+      const target = this.snapshot.units.find(item => item.id === targetId)!;
+      // "If I am the closest one holding it, I go." Ties fall to the earlier sentry for repeatability.
+      const free = holders.filter(holder => holder.unit.task !== 'intercept');
+      const nearest = free.reduce<typeof free[number] | undefined>((best, holder) => !best || holder.range < best.range ? holder : best, undefined);
+      if (!nearest) continue;
+      if (!nearest.solvable) {
+        // Once per contact, not once per step: the module keeps failing to resolve it every tick.
+        if (!this.unresolved.has(targetId)) {
+          this.unresolved.add(targetId);
+          this.log('warning', `${nearest.vehicle.label}: ${this.label(targetId)} closing past ${nearest.vehicle.defence!.sensor.velocityRange} m/s, track unresolved`, nearest.unit.id);
+        }
+        continue;
       }
-      if (!chosen) { chosen = fallback; shortest = nearest; }
-      if (!chosen) break;
-      chosen.unit.task = 'intercept'; chosen.unit.targetId = threat.id; committed.add(threat.id);
-      this.log('flight', `${chosen.vehicle.label}: committed to ${this.label(threat.id)}, ${Math.round(shortest)} m`, chosen.unit.id);
+      const defence = nearest.vehicle.defence!;
+      const crossing = crossingPoint(nearest.unit.position, Math.min(nearest.vehicle.speed, nearest.vehicle.maxSpeed), nearest.vehicle.acceleration, target.position, target.velocity);
+      if (!crossing?.reachable) continue;
+      nearest.unit.task = 'intercept'; nearest.unit.targetId = targetId; committed.add(targetId);
+      this.log('flight', `${nearest.vehicle.label}: ${this.label(targetId)} at ${Math.round(nearest.range)} m, crossing in ${crossing.dash.toFixed(0)} m / ${crossing.dashTime.toFixed(2)} s`, nearest.unit.id);
+      void defence;
     }
+
     for (const { unit, vehicle } of sentries) {
       if (unit.task !== 'intercept') continue;
       const defence = vehicle.defence!;
       const target = this.snapshot.units.find(item => item.id === unit.targetId);
       if (!target) continue;
-      const reading = contact(unit.position, unit.heading, defence.sensor, target.position);
-      if (!reading.seen || reading.measured > defence.engageRange) continue;
+      // Swept over the step rather than sampled at its end, so a fast pass cannot jump the radius.
+      const gap = closestApproach(unit.position, unit.velocity, target.position, target.velocity, STEP);
+      if (gap > defence.engageRange) continue;
       target.status = 'stopped'; target.velocity = { x: 0, y: 0, z: 0 }; target.airspeed = 0; target.groundSpeed = 0;
       unit.kills++; unit.targetId = '';
-      this.log('resolved', `${vehicle.label} stopped ${this.label(target.id)} at ${reading.measured.toFixed(1)} m`, unit.id);
+      this.log('resolved', `${vehicle.label} took down ${this.label(target.id)} at ${gap.toFixed(1)} m`, unit.id);
       if (defence.expendOnKill) { unit.status = 'expended'; unit.task = 'none'; unit.velocity = { x: 0, y: 0, z: 0 }; unit.airspeed = 0; unit.groundSpeed = 0; }
       else unit.task = 'return';
     }

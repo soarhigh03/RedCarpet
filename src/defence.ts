@@ -1,19 +1,27 @@
 import type { Sensor, ThreatPlan, Vec3, Vehicle } from './types';
 
 /**
- * Sensor envelope taken from the published Ainstein I-79 automotive 4D imaging radar figures.
+ * Sensor envelope from the published uRAD Industrial v2.0 figures (Anteral): a 60–64 GHz module
+ * with a 160° × 160° field, ±1 mm distance accuracy, 1° angle accuracy, and velocity measured to
+ * 45 m/s at ±0.15 m/s. The datasheet quotes maximum distance by target type — 70 m for a car,
+ * 40 m for a person — so 50 m is used here for a small drone, between the two.
  *
- * Those numbers describe what the radar can see; everything the simulation does with a contact
- * after that — assignment, pursuit, the modelled outcome — is a teaching abstraction, not a
- * guidance or fire-control model, and the hardware is not a counter-drone product.
+ * The velocity limit is not decoration. The intercept works out where a target's track crosses the
+ * sentry, which needs the target's velocity, so a contact closing faster than the module can
+ * measure is seen but cannot be solved for.
+ *
+ * These numbers describe what the radar can see. Everything the simulation does with a contact
+ * after that is a teaching abstraction, not a guidance or fire-control model, and the hardware is
+ * an industrial sensing module, not a counter-drone product.
  */
-export const I79_RADAR: Sensor = {
-  range: 240,            // m, nominal measurement range (0.5–240 m)
+export const URAD_INDUSTRIAL_V2: Sensor = {
+  range: 50,              // m, on a small drone; datasheet quotes 70 m car / 40 m person
   minRange: 0.5,
-  horizontalFov: 120,    // degrees, +/-60
-  verticalFov: 30,       // degrees, +/-15
-  rangeResolution: 0.39, // m
-  rangeAccuracy: 0.1,    // m
+  horizontalFov: 160,     // degrees, azimuth
+  verticalFov: 160,       // degrees, elevation
+  rangeResolution: 0.04,  // m, not published separately; taken at the order of the accuracy figure
+  rangeAccuracy: 0.001,   // m, +/-1 mm
+  velocityRange: 45,      // m/s, beyond which a closing rate is not measured
 };
 
 export const DEGREES = 180 / Math.PI;
@@ -22,12 +30,14 @@ export const bearingOf = (east: number, north: number) => (Math.atan2(east, -nor
 /** Shortest signed turn from one bearing to another, in degrees. */
 export const bearingDelta = (from: number, to: number) => ((to - from + 540) % 360) - 180;
 
-export type Contact = { seen: boolean; range: number; measured: number; offBoresight: number; elevation: number };
+export type Contact = { seen: boolean; range: number; measured: number; offBoresight: number; elevation: number; closing: number; solvable: boolean };
 /**
  * Where a target sits in a sensor's envelope. `measured` is the range quantised to the sensor's
- * resolution cell, which is what the engagement logic reads instead of the exact distance.
+ * resolution cell, which is what the engagement reads instead of the exact distance. `closing` is
+ * the radial rate; when it runs past the module's velocity range the contact is held but its
+ * motion is not resolved, so no crossing can be worked out from it.
  */
-export function contact(origin: Vec3, heading: number, sensor: Sensor, target: Vec3): Contact {
+export function contact(origin: Vec3, heading: number, sensor: Sensor, target: Vec3, velocity?: Vec3): Contact {
   const east = target.x - origin.x; const north = target.z - origin.z; const up = target.y - origin.y;
   const ground = Math.hypot(east, north);
   const range = Math.hypot(ground, up);
@@ -36,7 +46,44 @@ export function contact(origin: Vec3, heading: number, sensor: Sensor, target: V
   const measured = Math.round(range / sensor.rangeResolution) * sensor.rangeResolution;
   const seen = range >= sensor.minRange && range <= sensor.range
     && offBoresight <= sensor.horizontalFov / 2 && Math.abs(elevation) <= sensor.verticalFov / 2;
-  return { seen, range, measured, offBoresight, elevation };
+  const closing = velocity && range > 1e-6
+    ? -(velocity.x * east + velocity.y * up + velocity.z * north) / range
+    : 0;
+  return { seen, range, measured, offBoresight, elevation, closing, solvable: Math.abs(closing) <= sensor.velocityRange };
+}
+
+/** How long an airframe takes to cover a distance from rest, ramping at its acceleration. */
+export function travelTime(distance: number, speed: number, acceleration: number) {
+  const ramp = speed ** 2 / (2 * acceleration);
+  return distance <= ramp ? Math.sqrt(2 * distance / acceleration) : speed / acceleration + (distance - ramp) / speed;
+}
+export type Crossing = { point: Vec3; dash: number; targetTime: number; dashTime: number; reachable: boolean };
+/**
+ * Where a sentry meets a mover if it dashes square onto the mover's track — the foot of the
+ * perpendicular from the sentry to the line the target is flying. The dash is the shortest path
+ * onto that track, and when the target is passing directly overhead or underneath it is straight
+ * up or down. Returns nothing when the target has already passed the square-on point.
+ */
+export function crossingPoint(origin: Vec3, speed: number, acceleration: number, target: Vec3, velocity: Vec3): Crossing | undefined {
+  const pace = Math.hypot(velocity.x, velocity.y, velocity.z);
+  if (pace < 1e-6) return;
+  const track = { x: velocity.x / pace, y: velocity.y / pace, z: velocity.z / pace };
+  const behind = { x: origin.x - target.x, y: origin.y - target.y, z: origin.z - target.z };
+  const along = behind.x * track.x + behind.y * track.y + behind.z * track.z;
+  if (along <= 0) return;
+  const point = { x: target.x + track.x * along, y: target.y + track.y * along, z: target.z + track.z * along };
+  const dash = Math.hypot(point.x - origin.x, point.y - origin.y, point.z - origin.z);
+  const targetTime = along / pace;
+  const dashTime = travelTime(dash, speed, acceleration);
+  return { point, dash, targetTime, dashTime, reachable: dashTime <= targetTime };
+}
+/** Closest the two come during one step of straight motion, so a fast pass cannot slip between samples. */
+export function closestApproach(first: Vec3, firstVelocity: Vec3, second: Vec3, secondVelocity: Vec3, span: number) {
+  const gap = { x: second.x - first.x, y: second.y - first.y, z: second.z - first.z };
+  const rate = { x: secondVelocity.x - firstVelocity.x, y: secondVelocity.y - firstVelocity.y, z: secondVelocity.z - firstVelocity.z };
+  const square = rate.x ** 2 + rate.y ** 2 + rate.z ** 2;
+  const at = square < 1e-9 ? 0 : Math.max(0, Math.min(span, -(gap.x * rate.x + gap.y * rate.y + gap.z * rate.z) / square));
+  return Math.hypot(gap.x + rate.x * at, gap.y + rate.y * at, gap.z + rate.z * at);
 }
 
 /**

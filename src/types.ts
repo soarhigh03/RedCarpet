@@ -4,8 +4,11 @@ export type MapObject = { id: string; label: string; kind: MapKind; position: Ve
 export type Role = 'friendly' | 'hostile' | 'aircraft';
 export type VehicleKind = 'multirotor' | 'fixed-wing' | 'jet';
 export type PowerPoint = { speed: number; watts: number };
-/** Imaging-radar envelope. Angles are the full field of view in degrees; distances are metres. */
-export type Sensor = { range: number; minRange: number; horizontalFov: number; verticalFov: number; rangeResolution: number; rangeAccuracy: number };
+/**
+ * Radar envelope. Angles are the full field of view in degrees, distances metres, and velocityRange
+ * the fastest closing rate the module can measure — past it a contact is seen but not solvable.
+ */
+export type Sensor = { range: number; minRange: number; horizontalFov: number; verticalFov: number; rangeResolution: number; rangeAccuracy: number; velocityRange: number };
 /** Turns a drone into a covering sentry: where it waits, what it can see, and how close it must get. */
 export type Defence = { station: Vec3; heading: number; sensor: Sensor; engageRange: number; podId: string; expendOnKill: boolean };
 export type Vehicle = {

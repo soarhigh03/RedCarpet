@@ -43,7 +43,7 @@ export function validateScenario(input: unknown): ScenarioDocument {
       number(sensor.range, 'Sensor range', 1, 20000); number(sensor.minRange, 'Sensor minimum range', 0, 1000);
       if (sensor.minRange >= sensor.range) fail('Sensor minimum range', 'must be shorter than the measurement range');
       number(sensor.horizontalFov, 'Horizontal field of view', 1, 360); number(sensor.verticalFov, 'Vertical field of view', 1, 180);
-      number(sensor.rangeResolution, 'Range resolution', 0.001, 1000); number(sensor.rangeAccuracy, 'Range accuracy', 0, 1000);
+      number(sensor.rangeResolution, 'Range resolution', 0.0001, 1000); number(sensor.rangeAccuracy, 'Range accuracy', 0, 1000); number(sensor.velocityRange, 'Velocity limit', 0.1, 1000);
     }
   });
   const eventIds = new Set<string>();

@@ -22,21 +22,26 @@ export function airbasePoint(u: number, v: number, y = 0): Vec3 {
 export const AIRBASE_RUNWAY = { length: 2700, width: 60, usable: 2400 };
 
 /**
- * The covering screen. Sentries hold 100 m either side of the runway centreline, spaced along it,
- * already airborne before a departure rather than launching from a pod when something shows up.
- * Each post has a charging pod on the ground behind it, clear of the pavement.
+ * The covering screen, laid out for a 50 m sensor.
+ *
+ * A 50 m envelope cannot hold a line: it holds a bubble. Posted 100 m off the centreline the
+ * sentries could not see the runway at all, so they stand 40 m out at 20 m, close enough that the
+ * slant range to the centreline below them is about 45 m, and tight enough along the runway that
+ * neighbouring bubbles overlap. Four a side bracket the stretch the departures roll through and the
+ * run-ins are aimed at. They are already airborne before a departure rather than launching when
+ * something shows up, and each has a charging pod on the ground, off the pavement.
  */
-export const COVER_OFFSET = 100;
-export const COVER_ALTITUDE = 60;
-export const COVER_POSTS = [-1100, -700, -300, 100].flatMap(u => [{ u, side: -1 }, { u, side: 1 }]);
+export const COVER_OFFSET = 40;
+export const COVER_ALTITUDE = 20;
+export const COVER_POSTS = [-620, -540, -460, -380].flatMap(u => [{ u, side: -1 }, { u, side: 1 }]);
 /**
- * Each post looks outward from its own flank, and the end posts are angled to close the approaches
- * along the runway. A 120° sensor on each of the eight leaves the screen with no blind bearing,
- * while keeping whoever owns a bearing close to the ground it covers. One post still sees only its
- * own sector, which is what makes where you put them matter.
+ * Each post looks outward, across the approach rather than at the runway it guards: a threat comes
+ * from outside, and the 20° wedge a 160° sensor cannot see is the one pointing in. The end posts
+ * are angled along the runway so the eight together leave no blind bearing.
  */
-const SECTORS = [225, 135, 270, 90, 270, 90, 315, 45];
-const podAt = (post: { u: number; side: number }) => ({ u: post.u + 60, v: post.side < 0 ? -215 : 360 });
+const SECTORS = [240, 120, 260, 100, 280, 80, 300, 60];
+/** Pods sit out in the clear bands either side; a sentry's home does not have to be under its post. */
+const podAt = (post: { u: number; side: number }) => ({ u: post.u - 30, v: post.side < 0 ? -215 : 360 });
 export function coverPost(index: number) {
   const post = COVER_POSTS[index];
   return {
