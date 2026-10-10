@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { escapeHtml } from './data';
+import { SceneAssets } from './assets';
 import { type MapObject, type ScenarioDocument, type Snapshot, type Vec3, type Vehicle, type UnitState, isActive } from './types';
 
 const colors = { friendly: 0x27c9ab, hostile: 0xf09266, aircraft: 0x8ea6e9 };
 const material = (color: number, roughness = 0.8) => new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.05 });
 function box(width: number, height: number, depth: number, color: number) { const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material(color)); mesh.castShadow = true; mesh.receiveShadow = true; return mesh; }
 function addBox(parent: THREE.Object3D, width: number, height: number, depth: number, color: number, x: number, y: number, z: number) { const mesh = box(width, height, depth, color); mesh.position.set(x, y, z); parent.add(mesh); return mesh; }
-function dispose(root: THREE.Object3D) { root.traverse(object => { const mesh = object as THREE.Mesh; mesh.geometry?.dispose(); const materials = mesh.material ? Array.isArray(mesh.material) ? mesh.material : [mesh.material] : []; materials.forEach(item => { const basic = item as THREE.MeshBasicMaterial; basic.map?.dispose(); item.dispose(); }); }); }
+function dispose(root: THREE.Object3D) { root.traverse(object => { const mesh = object as THREE.Mesh; if (mesh instanceof THREE.InstancedMesh) mesh.dispose(); if (mesh.userData.sharedAsset) return; mesh.geometry?.dispose(); const materials = mesh.material ? Array.isArray(mesh.material) ? mesh.material : [mesh.material] : []; materials.forEach(item => { const basic = item as THREE.MeshBasicMaterial; basic.map?.dispose(); item.dispose(); }); }); }
 
 export class AirfieldScene {
   renderer: THREE.WebGLRenderer;
@@ -40,13 +41,16 @@ export class AirfieldScene {
   private selectedRing: THREE.Mesh;
   private rain: THREE.Points;
   private lastSnapshot?: Snapshot;
+  private assets = new SceneAssets();
+  private groundMaterial = new THREE.MeshStandardMaterial({ color: 0xb5bd9b, roughness: 1, metalness: 0 });
+  readonly assetsReady: Promise<string[]>;
   onSelect: (id: string) => void = () => {};
   onMove: (id: string, position: Vec3) => void = () => {};
   onWaypoint: (position: Vec3) => void = () => {};
   constructor(private host: HTMLElement) {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75)); this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace; this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.15;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace; this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1;
     this.renderer.domElement.setAttribute('aria-label', 'Interactive 3D airfield. Use the scene list and inspector for keyboard editing.');
     this.host.append(this.renderer.domElement);
     this.labelLayer = document.createElement('div'); this.labelLayer.className = 'scene-labels'; this.host.append(this.labelLayer);
@@ -55,7 +59,7 @@ export class AirfieldScene {
     const sunlight = new THREE.DirectionalLight(0xfff1dc, 3); sunlight.position.set(-900, 1800, 600); sunlight.castShadow = true;
     sunlight.shadow.mapSize.set(2048, 2048); sunlight.shadow.camera.left = -2000; sunlight.shadow.camera.right = 2000; sunlight.shadow.camera.top = 2000; sunlight.shadow.camera.bottom = -2000; sunlight.shadow.camera.far = 6000; sunlight.shadow.normalBias = 2;
     this.scene.add(sunlight, this.terrain, this.scenery, this.actors, this.routes, this.marks);
-    this.camera.position.set(1650, 1850, 2050); this.controls = new OrbitControls(this.camera, this.renderer.domElement); this.controls.target.set(-130, 0, 0); this.controls.enableDamping = true; this.controls.dampingFactor = 0.08; this.controls.maxPolarAngle = Math.PI / 2.1; this.controls.minDistance = 180; this.controls.maxDistance = 6500;
+    this.camera.position.set(1650, 1850, 2050); this.controls = new OrbitControls(this.camera, this.renderer.domElement); this.controls.target.set(-130, 0, 0); this.controls.enableDamping = true; this.controls.dampingFactor = 0.08; this.controls.maxPolarAngle = Math.PI / 2.1; this.controls.minDistance = 25; this.controls.maxDistance = 6500;
     this.transform = new TransformControls(this.camera, this.renderer.domElement); this.transform.setMode('translate'); this.transform.showY = false; this.transform.setSize(0.65); this.transform.setTranslationSnap(5); this.scene.add(this.transform.getHelper());
     this.transform.addEventListener('dragging-changed', event => { this.controls.enabled = !event.value; });
     this.transform.addEventListener('mouseUp', () => { const target = this.transform.object; if (target) this.onMove(this.selected, { x: Math.round(target.position.x), y: Math.round(target.position.y), z: Math.round(target.position.z) }); });
@@ -64,6 +68,11 @@ export class AirfieldScene {
     for (let index = 0; index < 600; index++) { rainPositions[index * 3] = Math.sin(index * 13) * 1700; rainPositions[index * 3 + 1] = (index * 53) % 1100; rainPositions[index * 3 + 2] = Math.cos(index * 19) * 1700; }
     rainGeometry.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3)); this.rain = new THREE.Points(rainGeometry, new THREE.PointsMaterial({ color: 0xe0eeff, size: 3, transparent: true, opacity: 0.4 })); this.rain.visible = false; this.scene.add(this.rain);
     this.buildTerrain();
+    this.assetsReady = this.assets.load().then(failed => {
+      if (this.assets.grass) { this.assets.grass.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy()); this.groundMaterial.map = this.assets.grass; this.groundMaterial.color.set(0xb7bba7); this.groundMaterial.needsUpdate = true; }
+      if (this.scenario) this.setScenario(this.scenario);
+      return failed;
+    });
     this.renderer.domElement.addEventListener('pointerdown', event => { this.down = { x: event.clientX, y: event.clientY }; });
     this.renderer.domElement.addEventListener('pointerup', event => this.pick(event));
     new ResizeObserver(() => this.resize()).observe(this.host); this.resize();
@@ -71,15 +80,9 @@ export class AirfieldScene {
   }
   private buildTerrain() {
     addBox(this.terrain, 6200, 35, 6000, 0xafb798, 0, -24, 0);
-    const fieldColors = [0xb7be9b, 0xc4c6a3, 0xb3bc96, 0xc1c4a6, 0xaeb991];
-    for (let index = 0; index < 30; index++) {
-      const x = (index % 6) * 850 - 2150; const z = Math.floor(index / 6) * 1000 - 2000;
-      addBox(this.terrain, 825, 1, 980, fieldColors[index % fieldColors.length], x, -5, z);
-    }
-    addBox(this.terrain, 1200, 2, 2500, 0xbfc5a5, -290, -2, 0);
-    addBox(this.terrain, 26, 1, 2800, 0x8a9184, -1050, -1, 0);
-    addBox(this.terrain, 2600, 1, 24, 0x8a9184, 0, -1, 1150);
-    const grid = new THREE.GridHelper(5000, 25, 0x7f947e, 0x99a88f); grid.position.y = -3; (grid.material as THREE.Material).transparent = true; (grid.material as THREE.Material).opacity = 0.14; this.terrain.add(grid);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(6200, 6000), this.groundMaterial); ground.rotation.x = -Math.PI / 2; ground.position.y = -0.1; ground.receiveShadow = true; this.terrain.add(ground);
+    addBox(this.terrain, 26, 1, 2800, 0x8a9184, -1050, 0, 0);
+    addBox(this.terrain, 2600, 1, 24, 0x8a9184, 0, 0, 1150);
     const bounds = [new THREE.Vector3(-1350, 1, -1300), new THREE.Vector3(1150, 1, -1300), new THREE.Vector3(1150, 1, 1100), new THREE.Vector3(-1350, 1, 1100), new THREE.Vector3(-1350, 1, -1300)];
     const perimeter = new THREE.Line(new THREE.BufferGeometry().setFromPoints(bounds), new THREE.LineDashedMaterial({ color: 0xe9eee0, dashSize: 14, gapSize: 10, transparent: true, opacity: 0.6 })); perimeter.computeLineDistances(); this.terrain.add(perimeter);
   }
@@ -108,7 +111,9 @@ export class AirfieldScene {
       addBox(group, width, height * 0.18, depth, 0x42656b, 0, height * 0.82, 0); addBox(group, width * 1.1, 5, depth * 1.1, 0xd4dbd0, 0, height * 0.93, 0);
       addBox(group, 2, height / 5, 2, 0x8e9c98, 0, height * 1.04, 0);
     } else if (item.kind === 'trees') {
-      for (let index = 0; index < 24; index++) {
+      const grove = this.assets.grove(width, height, depth);
+      if (grove) group.add(grove);
+      else for (let index = 0; index < 24; index++) {
         const x = Math.sin(index * 27.1) * width * 0.47; const z = Math.cos(index * 19.7) * depth * 0.47;
         const treeHeight = height * (0.65 + (Math.sin(index * 10) + 1) * 0.25);
         addBox(group, 3, treeHeight / 2, 3, 0x7b7761, x, treeHeight / 4, z);
@@ -127,7 +132,9 @@ export class AirfieldScene {
   }
   private vehicleModel(vehicle: Vehicle) {
     const group = new THREE.Group(); const tint = colors[vehicle.role];
-    if (vehicle.kind === 'multirotor') {
+    const flightVisual = vehicle.kind === 'jet' ? this.assets.jet() : undefined;
+    if (flightVisual) { group.add(flightVisual); group.userData.flightVisual = flightVisual; }
+    else if (vehicle.kind === 'multirotor') {
       addBox(group, 12, 5, 16, 0x274c50, 0, 2, 0);
       const armA = addBox(group, 38, 2, 3, 0x435b5b, 0, 2, 0); armA.rotation.y = Math.PI / 4;
       const armB = addBox(group, 38, 2, 3, 0x435b5b, 0, 2, 0); armB.rotation.y = -Math.PI / 4;
@@ -140,7 +147,7 @@ export class AirfieldScene {
       const cockpit = new THREE.Mesh(new THREE.SphereGeometry(4, 12, 8), material(0x294b5a, 0.3)); cockpit.scale.set(0.7, 0.5, 1.8); cockpit.position.set(0, 5, -9); group.add(cockpit);
       addBox(group, 2, 8, 11, tint, -6, 7, 18); addBox(group, 2, 8, 11, tint, 6, 7, 18);
     }
-    group.scale.setScalar(1.25); group.position.set(vehicle.position.x, vehicle.position.y, vehicle.position.z); group.userData.entityId = vehicle.id; group.traverse(child => { child.userData.entityId = vehicle.id; }); return group;
+    if (!flightVisual) group.scale.setScalar(1.25); group.rotation.order = 'YXZ'; group.position.set(vehicle.position.x, vehicle.position.y, vehicle.position.z); group.userData.entityId = vehicle.id; group.traverse(child => { child.userData.entityId = vehicle.id; }); return group;
   }
   setScenario(scenario: ScenarioDocument) {
     this.scenario = scenario; this.transform.detach();
@@ -169,6 +176,7 @@ export class AirfieldScene {
   routeMode(enabled: boolean) { this.editingRoute = enabled; this.controls.enableRotate = !enabled; this.host.classList.toggle('placing-route', enabled); if (enabled) { this.transform.detach(); this.setCamera('overhead'); } else this.select(this.selected); }
   setCamera(mode: string) {
     this.mode = mode;
+    this.host.closest('.viewport-wrap')?.classList.toggle('inspect-view', mode === 'follow');
     if (mode === 'overhead') { this.camera.position.set(-130, 3400, 1); this.controls.target.set(-130, 0, 0); }
     if (mode === 'orbit') { this.camera.position.set(1650, 1850, 2050); this.controls.target.set(-130, 0, 0); }
     this.controls.update();
@@ -191,6 +199,8 @@ export class AirfieldScene {
       const group = this.units.get(unit.id); if (!group) return;
       group.position.lerp(new THREE.Vector3(unit.position.x, unit.position.y, unit.position.z), this.running ? 0.32 : 1);
       if (Math.hypot(unit.velocity.x, unit.velocity.z) > 0.1) group.rotation.y = Math.atan2(-unit.velocity.x, -unit.velocity.z);
+      const flightVisual = group.userData.flightVisual as THREE.Group | undefined;
+      if (flightVisual) { const pitch = unit.status === 'airborne' ? Math.atan2(unit.velocity.y, Math.max(1, Math.hypot(unit.velocity.x, unit.velocity.z))) : 0; flightVisual.rotation.x += (pitch - flightVisual.rotation.x) * 0.18; }
       group.visible = !['stopped', 'expended', 'complete'].includes(unit.status);
       const label = this.labels.get(unit.id); if (!label) return;
       label.classList.toggle('inactive', !isActive(unit.status) && unit.status !== 'waiting');
@@ -201,11 +211,11 @@ export class AirfieldScene {
     if (focused) {
       this.selectedRing.position.set(focused.position.x, 3, focused.position.z);
       const object = this.scenario?.objects.find(item => item.id === this.selected); this.selectedRing.scale.setScalar(object ? Math.max(object.size.x, object.size.z) / 50 : 1.5);
-      if (this.mode === 'follow') { this.controls.target.lerp(focused.position, 0.05); const offset = new THREE.Vector3(300, 280, 400); this.camera.position.lerp(focused.position.clone().add(offset), 0.025); }
+      if (this.mode === 'follow') { this.controls.target.lerp(focused.position.clone().add(new THREE.Vector3(0, object ? object.size.y / 2 : 10, 0)), 0.12); const distance = object ? Math.max(object.size.x, object.size.z, 100) : 95; const offset = new THREE.Vector3(distance, distance * 0.7, distance * 1.4).applyAxisAngle(new THREE.Vector3(0, 1, 0), focused.rotation.y); this.camera.position.lerp(focused.position.clone().add(offset), 0.08); }
     }
     this.controls.update();
     const occupied: { x: number; y: number }[] = [];
-    const orderedLabels = [...this.labels].sort(([id]) => id === this.selected ? -1 : 0);
+    const orderedLabels = [...this.labels].sort(([first], [second]) => Number(second === this.selected) - Number(first === this.selected));
     orderedLabels.forEach(([id, label]) => {
       const group = this.units.get(id) ?? this.objects.get(id)!; const vector = group.position.clone(); vector.y += this.scenario?.objects.find(item => item.id === id)?.size.y ?? 36; vector.project(this.camera);
       const x = (vector.x * 0.5 + 0.5) * this.host.clientWidth; const y = (-vector.y * 0.5 + 0.5) * this.host.clientHeight;

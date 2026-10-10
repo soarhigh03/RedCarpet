@@ -1,0 +1,312 @@
+{
+  "formatVersion": 1,
+  "generatedAt": "2026-10-10T19:04:47.032Z",
+  "purpose": "Optimized runtime copies of user-provided visual assets. Original files are preserved outside this repository.",
+  "originals": [
+    {
+      "file": "Meshy_AI_militar_plane_1010185318_texture.glb",
+      "bytes": 6971016,
+      "triangles": 198837,
+      "vertices": 114075,
+      "primitives": 1,
+      "animations": 0,
+      "bounds": {
+        "min": [
+          -0.7006850242614746,
+          -0.29795199632644653,
+          -0.9528710246086121
+        ],
+        "max": [
+          0.6976879835128784,
+          0.293381005525589,
+          0.9799330234527588
+        ]
+      },
+      "textures": [
+        {
+          "format": "jpeg",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 932756
+        }
+      ],
+      "extensions": [],
+      "geometryCheck": "decoded; finite positions and valid indices"
+    },
+    {
+      "file": "Meshy_AI_a_tree_1010185545_texture.glb",
+      "bytes": 160675500,
+      "triangles": 3283835,
+      "vertices": 3300437,
+      "primitives": 1,
+      "animations": 0,
+      "bounds": {
+        "min": [
+          -0.6660529971122742,
+          -1.0015089511871338,
+          -0.6890559792518616
+        ],
+        "max": [
+          0.6556969881057739,
+          0.9967569708824158,
+          0.6860380172729492
+        ]
+      },
+      "textures": [
+        {
+          "format": "jpeg",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 3533350
+        },
+        {
+          "format": "jpeg",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 5075713
+        },
+        {
+          "format": "jpeg",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 7044108
+        }
+      ],
+      "extensions": [],
+      "geometryCheck": "decoded; finite positions and valid indices"
+    },
+    {
+      "file": "Meshy_AI_tree_1010130140_texture.glb",
+      "bytes": 21484512,
+      "triangles": 273866,
+      "vertices": 498754,
+      "primitives": 1,
+      "animations": 0,
+      "bounds": {
+        "min": [
+          -0.9550399780273438,
+          -1.0005799531936646,
+          -0.9762830138206482
+        ],
+        "max": [
+          0.9365170001983643,
+          0.9907730221748352,
+          0.9760569930076599
+        ]
+      },
+      "textures": [
+        {
+          "format": "jpeg",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 2236135
+        }
+      ],
+      "extensions": [],
+      "geometryCheck": "decoded; finite positions and valid indices"
+    }
+  ],
+  "runtime": [
+    {
+      "file": "military-jet.glb",
+      "source": "Meshy_AI_militar_plane_1010185318_texture.glb",
+      "bytes": 1219828,
+      "triangles": 83511,
+      "vertices": 54219,
+      "primitives": 1,
+      "animations": 0,
+      "bounds": {
+        "min": [
+          -0.7006850242614746,
+          -0.29795199632644653,
+          -0.9528710246086121
+        ],
+        "max": [
+          0.6976869106292725,
+          0.29334473609924316,
+          0.9799330830574036
+        ]
+      },
+      "textures": [
+        {
+          "format": "jpeg",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 932756
+        }
+      ],
+      "extensions": [
+        "KHR_draco_mesh_compression"
+      ],
+      "geometryCheck": "decoded; finite positions and valid indices"
+    },
+    {
+      "file": "tree-a.glb",
+      "source": "Meshy_AI_a_tree_1010185545_texture.glb",
+      "bytes": 6796400,
+      "triangles": 34751,
+      "vertices": 75956,
+      "primitives": 1,
+      "animations": 0,
+      "bounds": {
+        "min": [
+          -0.6604019999504089,
+          -1.000180959701538,
+          -0.6761680245399475
+        ],
+        "max": [
+          0.6471484303474426,
+          0.992339015007019,
+          0.6715155243873596
+        ]
+      },
+      "textures": [
+        {
+          "format": "webp",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 1077352
+        },
+        {
+          "format": "webp",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 1667344
+        },
+        {
+          "format": "webp",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 2917254
+        }
+      ],
+      "extensions": [
+        "EXT_texture_webp",
+        "KHR_draco_mesh_compression"
+      ],
+      "geometryCheck": "decoded; finite positions and valid indices"
+    },
+    {
+      "file": "tree-b.glb",
+      "source": "Meshy_AI_tree_1010130140_texture.glb",
+      "bytes": 2114792,
+      "triangles": 33921,
+      "vertices": 62821,
+      "primitives": 1,
+      "animations": 0,
+      "bounds": {
+        "min": [
+          -0.9341149926185608,
+          -0.9999799728393555,
+          -0.9656710028648376
+        ],
+        "max": [
+          0.9238950610160828,
+          0.965906023979187,
+          0.976095974445343
+        ]
+      },
+      "textures": [
+        {
+          "format": "webp",
+          "width": 2048,
+          "height": 2048,
+          "bytes": 1511700
+        }
+      ],
+      "extensions": [
+        "EXT_texture_webp",
+        "KHR_draco_mesh_compression"
+      ],
+      "geometryCheck": "decoded; finite positions and valid indices"
+    },
+    {
+      "file": "tree-a-lod.glb",
+      "source": "Meshy_AI_a_tree_1010185545_texture.glb",
+      "bytes": 758660,
+      "triangles": 11195,
+      "vertices": 24642,
+      "primitives": 1,
+      "animations": 0,
+      "bounds": {
+        "min": [
+          -0.6604019999504089,
+          -0.9914669990539551,
+          -0.6623740196228027
+        ],
+        "max": [
+          0.6398866772651672,
+          0.9699199199676514,
+          0.6583859920501709
+        ]
+      },
+      "textures": [
+        {
+          "format": "webp",
+          "width": 512,
+          "height": 512,
+          "bytes": 76252
+        },
+        {
+          "format": "webp",
+          "width": 512,
+          "height": 512,
+          "bytes": 129136
+        },
+        {
+          "format": "webp",
+          "width": 512,
+          "height": 512,
+          "bytes": 168668
+        }
+      ],
+      "extensions": [
+        "EXT_texture_webp",
+        "KHR_draco_mesh_compression"
+      ],
+      "geometryCheck": "decoded; finite positions and valid indices"
+    },
+    {
+      "file": "tree-b-lod.glb",
+      "source": "Meshy_AI_tree_1010130140_texture.glb",
+      "bytes": 336252,
+      "triangles": 16232,
+      "vertices": 24783,
+      "primitives": 1,
+      "animations": 0,
+      "bounds": {
+        "min": [
+          -0.9307940006256104,
+          -1.0005799531936646,
+          -0.9583179950714111
+        ],
+        "max": [
+          0.9239420890808105,
+          0.965906023979187,
+          0.9614754915237427
+        ]
+      },
+      "textures": [
+        {
+          "format": "webp",
+          "width": 512,
+          "height": 512,
+          "bytes": 112952
+        }
+      ],
+      "extensions": [
+        "EXT_texture_webp",
+        "KHR_draco_mesh_compression"
+      ],
+      "geometryCheck": "decoded; finite positions and valid indices"
+    }
+  ],
+  "processing": [
+    "Original orientation and centered coordinates retained; runtime supplies scale, translation, and heading.",
+    "Draco geometry compression for all models. Embedded 2K JPEG on jet; embedded 2K WebP on near trees; embedded 512px WebP on distant trees.",
+    "Tree meshes use attribute-aware permissive simplification. Distant Tree A retains extra triangles to preserve canopy. Distant Tree B locks lower-trunk vertices to preserve ground contact.",
+    "Tree A has generated MikkTSpace tangents for its existing normal map.",
+    "All outputs decoded successfully with finite positions and valid indices; glTF CLI validation reports no errors or warnings. Validator does not inspect the compressed Draco payload.",
+    "No animation clips exist in the supplied files; aircraft motion is controlled by the simulator."
+  ]
+}
