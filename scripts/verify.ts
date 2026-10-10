@@ -5,6 +5,8 @@ import { Simulation, powerAt, temperatureFactor } from '../src/simulation';
 import { makeScenario } from '../src/scenarios';
 import { buildImageScenario, exampleFootprints, objectOutline } from '../src/image-map';
 import { AIRBASE_HEADING, AIRBASE_RUNWAY, airbasePoint } from '../src/airbase';
+import { AIRBASE_AIM, rollWave } from '../src/scenarios';
+import { contact, DEFAULT_THREAT, I79_RADAR, interceptPoint } from '../src/defence';
 import { csv, validateRun, validateScenario } from '../src/data';
 import { clone, type ScenarioDocument } from '../src/types';
 
@@ -60,16 +62,89 @@ check('Air base layout stays on its runway axis and inside the modelled ground',
   assert.equal(Math.round(Math.atan2(north.x - south.x, south.z - north.z) * 180 / Math.PI), AIRBASE_HEADING);
   assert.equal(new Set(scenario.objects.map(object => object.id)).size, scenario.objects.length);
 });
-check('Air base departures and the authored intrusion resolve as scripted', () => {
+check('Radar envelope follows the published I-79 figures', () => {
+  const origin = { x: 0, y: 60, z: 0 };
+  const north = (metres: number, height = 60) => ({ x: 0, y: height, z: -metres });
+  assert.equal(I79_RADAR.range, 240); assert.equal(I79_RADAR.horizontalFov, 120); assert.equal(I79_RADAR.verticalFov, 30);
+  assert(contact(origin, 0, I79_RADAR, north(239)).seen);
+  assert(!contact(origin, 0, I79_RADAR, north(241)).seen, 'beyond the measurement range');
+  assert(!contact(origin, 0, I79_RADAR, north(0.2)).seen, 'inside the minimum range');
+  // +/-60 degrees horizontally: a contact due east is on the edge of a north-facing sensor.
+  assert(contact(origin, 0, I79_RADAR, { x: 100, y: 60, z: -58 }).seen);
+  assert(!contact(origin, 0, I79_RADAR, { x: 100, y: 60, z: 0 }).seen, 'past the horizontal edge');
+  // +/-15 degrees vertically: 100 m out, anything above about 26.8 m of separation is missed.
+  assert(contact(origin, 0, I79_RADAR, north(100, 60 + 26)).seen);
+  assert(!contact(origin, 0, I79_RADAR, north(100, 60 + 28)).seen, 'above the elevation limit');
+  assert(!contact(origin, 0, I79_RADAR, north(100, 60 - 28)).seen, 'below the elevation limit');
+  // Reported range is quantised to the resolution cell rather than reported exactly.
+  const reading = contact(origin, 0, I79_RADAR, north(100));
+  assert.equal(reading.measured, Math.round(100 / 0.39) * 0.39);
+  assert(Math.abs(reading.measured - 100) <= I79_RADAR.rangeResolution / 2);
+});
+check('A lead intercept is solved, and an uncatchable target reports none', () => {
+  const origin = { x: 0, y: 50, z: 0 };
+  const solution = interceptPoint(origin, 40, { x: 0, y: 50, z: -400 }, { x: 0, y: 0, z: 40 });
+  assert(solution, 'a head-on closure has a solution');
+  assert.equal(Math.round(solution!.time), 5);
+  assert.equal(Math.round(solution!.point.z), -200);
+  assert.equal(interceptPoint(origin, 20, { x: 0, y: 50, z: -400 }, { x: 0, y: 0, z: -80 }), undefined);
+});
+check('Sentries cover the runway at 100 m without ever waiting in a pod', () => {
+  const scenario = makeScenario('airbase');
+  const sentries = scenario.vehicles.filter(vehicle => vehicle.defence);
+  assert.equal(sentries.length, 8);
+  const pods = new Set(scenario.objects.filter(object => object.kind === 'pod').map(object => object.id));
+  assert.equal(pods.size, 8);
+  for (const sentry of sentries) {
+    const defence = sentry.defence!;
+    assert.equal(sentry.departAt, 0, 'already covering when the run starts');
+    assert.deepEqual(sentry.position, defence.station);
+    assert(pods.has(defence.podId), 'every sentry has a charging pod on the map');
+    assert.deepEqual(defence.sensor, I79_RADAR);
+    const offset = Math.hypot(defence.station.x - AIRBASE_AIM.x, defence.station.z - AIRBASE_AIM.z);
+    assert(offset < defence.sensor.range * 4, 'posted within reach of the ground it covers');
+  }
+  // 100 m off the centreline: the station is that far from the runway axis through the aim point.
+  const axis = AIRBASE_HEADING * Math.PI / 180;
+  for (const sentry of sentries) {
+    const east = sentry.defence!.station.x - AIRBASE_AIM.x; const north = sentry.defence!.station.z - AIRBASE_AIM.z;
+    assert.equal(Math.round(Math.abs(east * Math.cos(axis) + north * Math.sin(axis))), 100);
+  }
+  const first = new Simulation(scenario);
+  assert.equal(first.snapshot.units.find(unit => unit.id === sentries[0].id)?.status, 'airborne');
+});
+check('The screen detects, assigns the nearest free sentry, and hard kills', () => {
   const simulation = run(makeScenario('airbase'), 20);
-  const status = (id: string) => simulation.snapshot.units.find(unit => unit.id === id)?.status;
-  for (const id of ['kestrel-01', 'kestrel-02', 'kestrel-03']) assert.equal(status(id), 'complete');
-  assert.equal(simulation.snapshot.logs.filter(entry => entry.label.includes('takeoff complete')).length, 3);
-  assert.equal(simulation.snapshot.logs.filter(entry => entry.kind === 'resolved').length, 4);
-  assert.equal(simulation.snapshot.logs.filter(entry => entry.kind === 'skipped').length, 0);
-  assert.equal(status('intruder-01'), 'stopped'); assert.equal(status('intruder-02'), 'stopped'); assert.equal(status('intruder-03'), 'complete');
-  assert.equal(status('sentry-01'), 'expended');
-  assert.deepEqual(run(makeScenario('airbase'), 1).snapshot, simulation.snapshot);
+  const scenario = makeScenario('airbase');
+  const hostiles = scenario.vehicles.filter(vehicle => vehicle.role === 'hostile').map(vehicle => vehicle.id);
+  const threats = simulation.snapshot.units.filter(unit => hostiles.includes(unit.id));
+  assert.equal(threats.length, 8);
+  assert.equal(threats.filter(unit => unit.status === 'stopped').length, 8, 'the default wave is held');
+  assert.equal(threats.filter(unit => unit.status === 'complete').length, 0, 'nothing leaks through');
+  const shooters = simulation.snapshot.units.filter(unit => unit.kills > 0);
+  assert(shooters.length >= 3, 'more than one sentry is drawn in');
+  assert.equal(shooters.reduce((sum, unit) => sum + unit.kills, 0), 8);
+  // Every kill resolves inside the engagement range, and the sentry goes back to its post.
+  const engageRange = scenario.vehicles.find(vehicle => vehicle.defence)!.defence!.engageRange;
+  for (const entry of simulation.snapshot.logs.filter(log => log.kind === 'resolved')) {
+    assert(Number(entry.label.match(/at ([\d.]+) m$/)![1]) <= engageRange);
+  }
+  assert(simulation.snapshot.units.filter(unit => unit.task === 'hold').length >= 3);
+  for (const id of ['kestrel-01', 'kestrel-02', 'kestrel-03']) assert.equal(simulation.snapshot.units.find(unit => unit.id === id)?.status, 'complete');
+  assert.deepEqual(run(makeScenario('airbase'), 1).snapshot, simulation.snapshot, 'repeatable under any batching');
+});
+check('A rolled wave is reproducible, and a faster swarm gets through', () => {
+  const scenario = makeScenario('airbase');
+  const plan = { ...DEFAULT_THREAT, seed: 4242, count: 12 };
+  assert.deepEqual(rollWave(scenario, plan).vehicles, rollWave(scenario, plan).vehicles, 'same plan, same wave');
+  assert.notDeepEqual(rollWave(scenario, plan).vehicles, rollWave(scenario, { ...plan, seed: 4243 }).vehicles);
+  const rolled = validateScenario(rollWave(scenario, plan));
+  assert.equal(rolled.vehicles.filter(vehicle => vehicle.role === 'hostile').length, 12);
+  assert.equal(rolled.vehicles.filter(vehicle => vehicle.defence).length, 8, 'the screen is left alone');
+  const swarm = run(validateScenario(rollWave(scenario, { ...DEFAULT_THREAT, seed: 555, count: 14, speedMin: 45, speedMax: 75, window: 40 })), 20);
+  const leaked = swarm.snapshot.units.filter(unit => unit.status === 'complete' && unit.id.startsWith('intruder'));
+  assert(leaked.length > 0, 'a saturating wave is not all held');
+  assert(swarm.snapshot.logs.some(entry => entry.kind === 'warning' && entry.label.includes('aim point')));
 });
 check('Fictional outlines align with the image and preserve runway orientation', () => {
   const objects = exampleFootprints(); const runway = objects.find(object => object.kind === 'runway')!;

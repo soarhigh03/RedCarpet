@@ -1,5 +1,6 @@
-import { AIRBASE_RUNWAY, airbaseObjects, airbasePoint } from './airbase';
-import { clone, type MapKind, type MapObject, type ScenarioDocument, type Vehicle } from './types';
+import { AIRBASE_RUNWAY, airbaseObjects, airbasePoint, coverPost, COVER_POSTS } from './airbase';
+import { DEFAULT_THREAT, I79_RADAR, rollThreats } from './defence';
+import { clone, type MapKind, type MapObject, type ScenarioDocument, type ThreatPlan, type Vehicle } from './types';
 
 function object(id: string, label: string, kind: MapKind, x: number, z: number, width: number, height: number, depth: number, rotation = 0): MapObject {
   return { id, label, kind, position: { x, y: 0, z }, size: { x: width, y: height, z: depth }, rotation };
@@ -78,10 +79,42 @@ export function makeScenario(preset = 'successful'): ScenarioDocument {
   if (preset === 'airbase') Object.assign(scenario, makeAirbaseScenario());
   return clone(scenario);
 }
+/** The point the wave is aimed at: the runway where the departures start their roll. */
+export const AIRBASE_AIM = airbasePoint(-500, 0, 10);
+
+/** A covering sentry: already on station, radar envelope from the I-79 figures, pod on the ground. */
+export function makeSentry(index: number): Vehicle {
+  const post = coverPost(index);
+  const sentry = makeVehicle(`sentry-${String(index + 1).padStart(2, '0')}`, 'friendly', index);
+  sentry.label = `Sentry ${String(index + 1).padStart(2, '0')}`;
+  sentry.position = clone(post.station);
+  sentry.route = [clone(post.station)];
+  sentry.departAt = 0;
+  sentry.speed = 42; sentry.maxSpeed = 60; sentry.climbRate = 16; sentry.batteryWh = 420;
+  sentry.powerCurve = [{ speed: 0, watts: 240 }, { speed: 20, watts: 380 }, { speed: 42, watts: 760 }, { speed: 60, watts: 1450 }];
+  sentry.defence = { station: clone(post.station), heading: post.heading, sensor: { ...I79_RADAR }, engageRange: 12, podId: post.podId, expendOnKill: false };
+  return sentry;
+}
+/** One ramming drone of a rolled wave. Course, speed, altitude and release time come from the plan. */
+export function makeIntruder(index: number): Vehicle {
+  const intruder = makeVehicle(`intruder-${String(index + 1).padStart(2, '0')}`, 'hostile', index);
+  intruder.label = `Intruder ${String(index + 1).padStart(2, '0')}`;
+  intruder.batteryWh = 300; intruder.climbRate = 22;
+  intruder.powerCurve = [{ speed: 0, watts: 220 }, { speed: 20, watts: 340 }, { speed: 45, watts: 880 }, { speed: 60, watts: 1500 }];
+  return intruder;
+}
+/** Replaces a scenario's hostile vehicles with a freshly rolled wave, leaving everything else alone. */
+export function rollWave(scenario: ScenarioDocument, plan: ThreatPlan, aim = AIRBASE_AIM): ScenarioDocument {
+  const next = clone(scenario);
+  next.threat = { ...plan };
+  next.vehicles = [...next.vehicles.filter(vehicle => vehicle.role !== 'hostile'), ...rollThreats(plan, aim, makeIntruder)];
+  next.events = next.events.filter(event => next.vehicles.some(vehicle => vehicle.id === event.actorId));
+  return next;
+}
 /**
  * A fictional tactical air base: one runway on a 020° axis, parallel taxiways, two shelter rows,
- * a maintenance apron and support area, inside a wooded perimeter. Three departures run against an
- * authored intrusion. Coordinates come from the runway-local helper so the whole field stays aligned.
+ * a maintenance apron and support area, inside a wooded perimeter. Eight sentries cover the runway
+ * at 100 m while three departures roll, and a rolled wave of ramming drones runs in at them.
  */
 function makeAirbaseScenario(): Partial<ScenarioDocument> {
   const aircraft = [0, 1, 2].map(index => {
@@ -89,39 +122,23 @@ function makeAirbaseScenario(): Partial<ScenarioDocument> {
     jet.label = `Kestrel 0${index + 1}`;
     jet.position = airbasePoint(-1150 - index * 95, 0, 5);
     jet.route = [airbasePoint(1250, 0, 320), airbasePoint(2400, 200, 760), airbasePoint(2500, -1600, 1050)];
-    jet.departAt = 8 + index * 70;
+    jet.departAt = 20 + index * 90;
     jet.runwayLength = AIRBASE_RUNWAY.usable;
     return jet;
   });
-  const sentries = [0, 1, 2].map(index => {
-    const sentry = makeVehicle(`sentry-0${index + 1}`, 'friendly', index);
-    sentry.position = airbasePoint(-200 + index * 400, 1150, 10);
-    sentry.route = [airbasePoint(-900, -500, 200), airbasePoint(900, -700, 200), airbasePoint(1500, 300, 160), airbasePoint(0, 1200, 140)];
-    sentry.departAt = 10 + index * 8;
-    return sentry;
-  });
-  const intruders = [0, 1, 2].map(index => {
-    const intruder = makeVehicle(`intruder-0${index + 1}`, 'hostile', index);
-    intruder.position = airbasePoint(400 + index * 420, -2300 - index * 120, 220);
-    intruder.route = [airbasePoint(300, 500, 180), airbasePoint(-800, 1400, 150), airbasePoint(-1600, 2600, 200)];
-    intruder.departAt = index * 10;
-    return intruder;
-  });
-  return {
+  const base: ScenarioDocument = {
+    schemaVersion: 1,
     name: '서해 전술비행단 (가상)',
-    description: 'A fictional tactical air base. One runway on a 020° axis, parallel taxiways, two shelter rows, a maintenance apron, and a wooded perimeter. Three departures run against an authored intrusion from the west.',
-    seed: 7742, duration: 240,
+    description: 'A fictional tactical air base. Eight sentries cover the runway at 100 m with I-79 class imaging radar while three departures roll. A rolled wave of ramming drones runs in on random courses; the nearest free sentry is sent to each one it detects.',
+    seed: 7742, duration: 300,
     objects: airbaseObjects(),
-    vehicles: [...aircraft, ...sentries, ...intruders],
-    events: [
-      { id: 'ab-evt-1', time: 112, action: 'stop', actorId: 'intruder-01', partnerId: 'sentry-01', delaySeconds: 0, label: 'First track stopped west of the shelters' },
-      { id: 'ab-evt-2', time: 113, action: 'expend', actorId: 'sentry-01', partnerId: '', delaySeconds: 0, label: 'Sentry 01 expended' },
-      { id: 'ab-evt-3', time: 131, action: 'stop', actorId: 'intruder-02', partnerId: 'sentry-02', delaySeconds: 0, label: 'Second track stopped over the apron' },
-      { id: 'ab-evt-4', time: 158, action: 'continue', actorId: 'intruder-03', partnerId: '', delaySeconds: 0, label: 'Third track continues through the north corridor' },
-    ],
+    vehicles: [...aircraft, ...COVER_POSTS.map((_, index) => makeSentry(index))],
+    events: [],
     weather: { windSpeed: 4, windDirection: 20, gusts: 2, temperature: 14, rain: 0, visibility: 14000 },
+    threat: { ...DEFAULT_THREAT },
     observations: { noise: 10, missRate: 0.1, latency: 0.3 },
   };
+  return rollWave(base, base.threat!);
 }
 export const presets = [
   ['successful', 'Successful defense', 'Two authored encounters'], ['unsuccessful', 'Open corridor', 'Pass-through & departure hold'],

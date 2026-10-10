@@ -21,6 +21,32 @@ export function airbasePoint(u: number, v: number, y = 0): Vec3 {
 
 export const AIRBASE_RUNWAY = { length: 2700, width: 60, usable: 2400 };
 
+/**
+ * The covering screen. Sentries hold 100 m either side of the runway centreline, spaced along it,
+ * already airborne before a departure rather than launching from a pod when something shows up.
+ * Each post has a charging pod on the ground behind it, clear of the pavement.
+ */
+export const COVER_OFFSET = 100;
+export const COVER_ALTITUDE = 60;
+export const COVER_POSTS = [-1100, -700, -300, 100].flatMap(u => [{ u, side: -1 }, { u, side: 1 }]);
+/**
+ * Each post looks outward from its own flank, and the end posts are angled to close the approaches
+ * along the runway. A 120° sensor on each of the eight leaves the screen with no blind bearing,
+ * while keeping whoever owns a bearing close to the ground it covers. One post still sees only its
+ * own sector, which is what makes where you put them matter.
+ */
+const SECTORS = [225, 135, 270, 90, 270, 90, 315, 45];
+const podAt = (post: { u: number; side: number }) => ({ u: post.u + 60, v: post.side < 0 ? -215 : 360 });
+export function coverPost(index: number) {
+  const post = COVER_POSTS[index];
+  return {
+    podId: `ab-pod-${index}`,
+    station: airbasePoint(post.u, post.side * COVER_OFFSET, COVER_ALTITUDE),
+    pod: airbasePoint(podAt(post).u, podAt(post).v),
+    heading: (AIRBASE_HEADING + SECTORS[index] + 360) % 360,
+  };
+}
+
 /** Repeatable 0–1 scatter for the generated woodland belt, so the layout is identical on every load. */
 const scatter = (value: number) => { const noise = Math.sin(value * 127.1 + 311.7) * 43758.5453; return noise - Math.floor(noise); };
 
@@ -67,6 +93,12 @@ export function airbaseObjects(): MapObject[] {
     add(`stub-b-${index}`, `Shelter stub B${index + 1}`, 'taxiway', u, 488, 115, 1, 14);
     add(`shelter-b-${index}`, `Shelter B${String(index + 1).padStart(2, '0')}`, 'hangar', u, 560, 40, 14, 32, -90);
   }
+
+  // Charging pods for the covering screen, one behind each post and clear of the pavement.
+  COVER_POSTS.forEach((post, index) => {
+    const pod = podAt(post);
+    add(`pod-${index}`, `Charging pod ${String(index + 1).padStart(2, '0')}`, 'pod', pod.u, pod.v, 18, 3, 18);
+  });
 
   // Maintenance apron and its hangar line, with the hangar doors onto the apron.
   add('apron', 'Main apron', 'taxiway', -100, 760, 320, 1, 760);
