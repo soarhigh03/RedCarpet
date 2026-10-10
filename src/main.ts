@@ -46,7 +46,7 @@ const send = (command: WorkerCommand) => worker.postMessage(command);
 
 $('#app').innerHTML = `
   <header class="app-header">
-    <a class="brand" href="#" aria-label="Airfield home"><span class="brand-mark"><i></i><i></i><i></i></span><span>AIRFIELD<small>SIMULATION ENVIRONMENT</small></span></a>
+    <a class="brand" href="#" aria-label="Project RedCarpet home"><span class="brand-mark"><i></i><i></i><i></i></span><span>Project RedCarpet<small>SIMULATION ENVIRONMENT</small></span></a>
     <nav class="main-nav" aria-label="Main navigation"><button class="active" data-action="panel" data-value="workspace">${icon('map')} Workspace</button><button data-action="panel" data-value="analysis">${icon('chart')} Analysis</button><a href="./lab-report.html" target="_blank" rel="noopener">${icon('layers')} Hardware lab <span class="external">↗</span></a></nav>
     <div class="header-end"><span class="version-tag">FICTIONAL SIMULATION</span><button class="icon-button header-help" data-action="help" aria-label="Help">${icon('info')}</button><span class="system-indicator"><i></i> LOCAL ENGINE</span></div>
   </header>
