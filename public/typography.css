@@ -9,9 +9,9 @@
 }
 
 :root {
-  /* Impact supplies Latin glyphs; Korean falls back to bundled Pretendard.
-     Impact uses the visitor's installed font and is not redistributed. */
-  --font-ui: Impact, 'Pretendard', sans-serif;
+  --font-ui: 'Pretendard', sans-serif;
+  /* Only headings use local Impact; Korean headings fall back to Pretendard. */
+  --font-heading: Impact, 'Pretendard', sans-serif;
   font-family: var(--font-ui);
   letter-spacing: -0.02em;
   font-synthesis: none;
@@ -19,3 +19,6 @@
 
 /* Resolve em spacing at each element's own font size. */
 *, *::before, *::after { letter-spacing: -0.02em; }
+
+/* Shared title hierarchy, including the standalone hardware report. */
+h1, h2, h3, h4, h5, h6, th { font-family: var(--font-heading); }
