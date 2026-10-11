@@ -1,5 +1,5 @@
 import { AIRBASE_RUNWAY, airbaseObjects, airbasePoint, coverPost, COVER_POSTS, PATROL } from './airbase';
-import { AWR2944P, DEFAULT_THREAT, rollThreats } from './defence';
+import { COUNTER_UAS, DEFAULT_THREAT, rollThreats } from './defence';
 import { clone, type MapKind, type MapObject, type ScenarioDocument, type ThreatPlan, type Vehicle } from './types';
 
 function object(id: string, label: string, kind: MapKind, x: number, z: number, width: number, height: number, depth: number, rotation = 0): MapObject {
@@ -127,11 +127,14 @@ export function makeSentry(index: number, readyAt = FORM_UP_LEAD): Vehicle {
   sentry.position = clone(start);
   sentry.route = [clone(post.station)];
   sentry.departAt = 0;
-  sentry.speed = 35; sentry.maxSpeed = 35; sentry.climbRate = 18; sentry.acceleration = 15;
-  sentry.batteryWh = 1100;   // 40 min of patrol at the cruise point of the curve below
-  sentry.powerCurve = [{ speed: 0, watts: 900 }, { speed: 18, watts: 1300 }, { speed: 35, watts: 2200 }];
+  // 45 m/s, not 35. The vault stands 150 m off the runway to stay clear of the aeroplane, and a
+  // dash has to cross that before it reaches anything: five seconds of warning at 35 m/s buys
+  // 134 m and falls short of its own standoff, at 45 m/s it buys 174 m and clears it.
+  sentry.speed = 45; sentry.maxSpeed = 45; sentry.climbRate = 22; sentry.acceleration = 20;
+  sentry.batteryWh = 1400;   // 40 min of patrol at the cruise point of the curve below
+  sentry.powerCurve = [{ speed: 0, watts: 1000 }, { speed: 22, watts: 1500 }, { speed: 45, watts: 2900 }];
   sentry.defence = {
-    station: clone(post.station), heading: post.heading, sensor: { ...AWR2944P },
+    station: clone(post.station), heading: post.heading, tilt: post.tilt, sensor: { ...COUNTER_UAS },
     engageRange: 10, podId: post.podId, expendOnKill: false,
     // Left off entirely rather than set undefined, so the document survives a JSON round trip.
     ...(post.patrol ? { patrol: { ...post.patrol, centre: clone(post.patrol.centre) } } : {}),

@@ -305,7 +305,7 @@ export class Simulation {
       let nearest = ''; let shortest = Infinity; let count = 0;
       for (const mover of movers) {
         if (mover.unit.id === sentry.unit.id) continue;
-        const reading = contact(sentry.unit.position, sentry.unit.heading, sensor, mover.unit.position, mover.unit.velocity);
+        const reading = contact(sentry.unit.position, sentry.unit.heading, sensor, mover.unit.position, mover.unit.velocity, sentry.vehicle.defence!.tilt);
         if (!reading.seen) continue;
         count++;
         // What the sensor returns is a track. Whether it is a threat is the drone's own call, and

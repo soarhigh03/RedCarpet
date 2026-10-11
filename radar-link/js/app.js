@@ -9,6 +9,7 @@
   const $ = (selector) => document.querySelector(selector);
   const FRAME_WRAP = 65536;          // the frame counter is 16-bit on the wire
   const CAPTURE_LIMIT = 50000;       // lines held for export
+  const RECORD_LIMIT = 400000;       // ~11 hours at 10 Hz before a recording truncates
   const LOG_LIMIT = 220;             // rows kept in each stream list
 
   // ── Settings ─────────────────────────────────────────────
@@ -45,6 +46,8 @@
     replay: { lines: [], index: 0, playing: false, name: '', carry: 0, speed: 1, loop: true },
     capture: [],
     captureTruncated: false,
+    /** An explicitly marked segment, started and stopped by hand. */
+    recording: { active: false, startedAt: 0, startedWall: null, lines: [], frames: 0, truncated: false },
     logTab: 'stream',
     problems: 0,
     logCount: 0,
@@ -71,6 +74,7 @@
     playBtn: '#play-btn', playIcon: '#play-icon', replayPos: '#replay-pos', replayTotal: '#replay-total',
     replayClock: '#replay-clock', replayScrub: '#replay-scrub', replaySpeed: '#replay-speed', replayLoop: '#replay-loop',
     fileInput: '#file-input', toast: '#toast',
+    recordBtn: '#record-btn', recordStop: '#record-stop',
     settingsDialog: '#settings-dialog', helpDialog: '#help-dialog',
     footDot: '#foot-dot', footLink: '#foot-link', footSource: '#foot-source', footStats: '#foot-stats', footRate: '#foot-rate',
     inspIcon: '#insp-icon', inspName: '#insp-name', inspBadge: '#insp-badge', inspSub: '#insp-sub', inspWire: '#insp-wire',
@@ -139,6 +143,12 @@
 
     if (state.capture.length < CAPTURE_LIMIT) state.capture.push(trimmed);
     else state.captureTruncated = true;
+
+    const rec = state.recording;
+    if (rec.active) {
+      if (rec.lines.length < RECORD_LIMIT) rec.lines.push(trimmed);
+      else rec.truncated = true;
+    }
 
     state.stats.chars += trimmed.length + 1;
     const row = RL.parseLine(trimmed);
@@ -478,6 +488,7 @@
     else if (state.link.status === 'open' && !live) { label = state.replay.lines.length && !state.replay.playing ? 'REPLAY PAUSED' : 'NO FRAMES'; tone = 'alert'; }
     else if (live && state.tracks.size === 0) { label = 'NO CONTACT'; tone = 'running'; }
     else if (live) { label = state.mode === 'replay' ? 'REPLAY' : state.link.kind === 'synthetic' ? 'SYNTHETIC' : 'TRACKING'; tone = 'running'; }
+    if (state.recording.active) { label = 'REC · ' + label; tone = 'recording'; }
     els.runStatus.className = 'status-pill' + (tone ? ' ' + tone : '');
     text('#run-status-label', label);
     text('#frame-tag', state.stats.frames ? state.stats.frames + ' frames · ' + state.stats.dropped + ' dropped' : '');
@@ -635,6 +646,9 @@
       renderStrips(track);
       renderTrackList();
       renderLinkPane();
+      if (state.recording.active) {
+        text('#record-label', RL.fmt.clock(at - state.recording.startedAt) + ' · ' + state.recording.lines.length + ' lines');
+      }
       const step = maxRange / 4;
       text('#scale-label', 'max ' + RL.fmt.distance(maxRange, 1) + ' · ring ' + RL.fmt.distance(step, 1) +
         (settings.rangeMode === 'auto' ? ' · auto' : ''));
@@ -691,7 +705,9 @@
       els.logList.innerHTML = ''; els.problemList.innerHTML = '';
       state.logCount = 0; state.problems = 0;
       text('#log-count', '0'); text('#problem-count', '0');
-    } else if (action === 'export') { exportCapture(); }
+    } else if (action === 'record') { if (!state.recording.active) startRecording(); }
+    else if (action === 'record-stop') { stopRecording(); }
+    else if (action === 'export') { exportCapture(); }
     else if (action === 'settings') { openSettings(); }
     else if (action === 'help') { els.helpDialog.showModal(); }
   });
@@ -775,19 +791,59 @@
       .catch(() => loadReplay(SAMPLE.join('\n'), 'built-in sample (11 lines)'));
   }
 
-  function exportCapture() {
-    if (!state.capture.length) { toast('Nothing received yet.'); return; }
-    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const header = '# radar-link capture ' + new Date().toISOString() +
-      ' · ' + (KIND_LABEL[state.link.kind] || 'no link') + (state.link.name ? ' · ' + state.link.name : '') +
-      (state.captureTruncated ? ' · truncated at ' + CAPTURE_LIMIT + ' lines' : '');
-    const blob = new Blob([header + '\n' + state.capture.join('\n') + '\n'], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
+  const stampNow = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+  /** Write lines out as a .csv the page can read back in. */
+  function saveLines(lines, filename, headerLines) {
+    const body = headerLines.map((line) => '# ' + line).join('\n') + '\n' + lines.join('\n') + '\n';
+    const url = URL.createObjectURL(new Blob([body], { type: 'text/csv' }));
     const link = document.createElement('a');
-    link.href = url; link.download = 'radar-link-' + stamp + '.csv';
+    link.href = url; link.download = filename;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  const sourceLabel = () => (KIND_LABEL[state.link.kind] || 'no link') + (state.link.name ? ' · ' + state.link.name : '');
+
+  function exportCapture() {
+    if (!state.capture.length) { toast('Nothing received yet.'); return; }
+    saveLines(state.capture, 'radar-link-' + stampNow() + '.csv', [
+      'radar-link capture ' + new Date().toISOString() + ' · ' + sourceLabel(),
+      state.capture.length + ' lines' + (state.captureTruncated ? ', truncated at ' + CAPTURE_LIMIT : ''),
+    ]);
     toast('Saved ' + state.capture.length + ' lines' + (state.captureTruncated ? ' (truncated)' : ''));
+  }
+
+  function startRecording() {
+    state.recording = { active: true, startedAt: now(), startedWall: new Date(), lines: [], frames: state.stats.frames, truncated: false };
+    els.recordBtn.classList.add('active');
+    els.recordStop.disabled = false;
+    note('Recording started.');
+    toast('Recording. Press Stop & save to write the file.');
+  }
+
+  function stopRecording() {
+    const rec = state.recording;
+    if (!rec.active) return;
+    rec.active = false;
+    els.recordBtn.classList.remove('active');
+    els.recordStop.disabled = true;
+    text('#record-label', 'Record');
+
+    const seconds = now() - rec.startedAt;
+    if (!rec.lines.length) {
+      note('Recording stopped after ' + RL.fmt.clock(seconds) + ' with no lines — nothing to save.');
+      toast('No lines arrived, so nothing was saved.');
+      return;
+    }
+    saveLines(rec.lines, 'radar-link-rec-' + stampNow() + '.csv', [
+      'radar-link recording · ' + sourceLabel(),
+      'started ' + rec.startedWall.toISOString() + ', ran ' + RL.fmt.clock(seconds),
+      rec.lines.length + ' lines, ' + (state.stats.frames - rec.frames) + ' frames' +
+        (rec.truncated ? ', truncated at ' + RECORD_LIMIT : ''),
+    ]);
+    note('Recording saved: ' + rec.lines.length + ' lines over ' + RL.fmt.clock(seconds) + '.');
+    toast('Saved ' + rec.lines.length + ' lines (' + RL.fmt.clock(seconds) + ').');
   }
 
   // ── Settings dialog ──────────────────────────────────────

@@ -39,6 +39,24 @@ export const AWR2944P: Sensor = {
   rangeResolution: 0.05, rangeAccuracy: 0.05, velocityRange: 90,
 };
 
+/**
+ * What the sentries actually fly, and the one sensor here that is not taken from a datasheet.
+ *
+ * The automotive parts above are real and their numbers are honest, which is exactly why neither
+ * works arched over a runway: a 10° elevation beam looks at the horizon, and a run-in diving on the
+ * strip is never at the horizon. Measured, a vault carrying AWR2944P stops nothing at all.
+ *
+ * So this is a notional counter-UAS head instead — 300 m on a small drone, 140° × 90°, the sort of
+ * wide-field envelope a purpose-built mount would have rather than a forward-looking car radar.
+ * Ten drones carrying it hold about four of every five run-ins. It is a modelling choice made to
+ * keep the sandbox playable, not a specification of any product.
+ */
+export const COUNTER_UAS: Sensor = {
+  range: 300, minRange: 0.5,
+  horizontalFov: 140, verticalFov: 90,
+  rangeResolution: 0.1, rangeAccuracy: 0.1, velocityRange: 120,
+};
+
 export const DEGREES = 180 / Math.PI;
 export const length3 = (v: Vec3) => Math.hypot(v.x, v.y, v.z);
 export const unit3 = (v: Vec3): Vec3 => { const n = length3(v) || 1; return { x: v.x / n, y: v.y / n, z: v.z / n }; };
@@ -58,11 +76,13 @@ export const bearingDelta = (from: number, to: number) => ((to - from + 540) % 3
 export type Contact = { seen: boolean; range: number; measured: number; offBoresight: number; elevation: number; closing: number; solvable: boolean };
 /**
  * Where a target sits in a sensor's envelope. `measured` is the range quantised to the sensor's
- * resolution cell, which is what the engagement reads instead of the exact distance. `closing` is
+ * resolution cell, which is what the engagement reads instead of the exact distance. `tilt` lifts
+ * or drops the boresight, so the elevation band is measured about where the sensor actually points
+ * rather than about the horizon. `closing` is
  * the radial rate; when it runs past the module's velocity range the contact is held but its
  * motion is not resolved, so no crossing can be worked out from it.
  */
-export function contact(origin: Vec3, heading: number, sensor: Sensor, target: Vec3, velocity?: Vec3): Contact {
+export function contact(origin: Vec3, heading: number, sensor: Sensor, target: Vec3, velocity?: Vec3, tilt = 0): Contact {
   const east = target.x - origin.x; const north = target.z - origin.z; const up = target.y - origin.y;
   const ground = Math.hypot(east, north);
   const range = Math.hypot(ground, up);
@@ -70,7 +90,7 @@ export function contact(origin: Vec3, heading: number, sensor: Sensor, target: V
   const elevation = Math.atan2(up, ground) * DEGREES;
   const measured = Math.round(range / sensor.rangeResolution) * sensor.rangeResolution;
   const seen = range >= sensor.minRange && range <= sensor.range
-    && offBoresight <= sensor.horizontalFov / 2 && Math.abs(elevation) <= sensor.verticalFov / 2;
+    && offBoresight <= sensor.horizontalFov / 2 && Math.abs(elevation - tilt) <= sensor.verticalFov / 2;
   const closing = velocity && range > 1e-6
     ? -(velocity.x * east + velocity.y * up + velocity.z * north) / range
     : 0;

@@ -47,6 +47,8 @@ let routeEditing = false; let recordIntent: 'save' | 'replay' | 'json' | 'csv' |
 let undoStack: ScenarioDocument[] = []; let redoStack: ScenarioDocument[] = [];
 let liveHistory: { time: number; battery: number; speed: number; altitude: number }[] = [];
 let toastTimer: ReturnType<typeof setTimeout>;
+/** Breaches seen so far, so the alarm fires on a new one and not on every frame of the same one. */
+let breaches = 0; let breachTimer: ReturnType<typeof setTimeout>;
 let world: AirfieldScene;
 const worker = new Worker(new URL('./sim.worker.ts', import.meta.url), { type: 'module' });
 const send = (command: WorkerCommand) => worker.postMessage(command);
@@ -73,6 +75,7 @@ $('#app').innerHTML = `
   <main class="workspace">
     <div class="viewport-wrap"><div id="viewport" class="viewport"></div><div class="viewport-toolbar"><div class="view-switch"><button class="active" data-action="camera" data-value="orbit">${icon('globe', 15)} 3D view</button><button data-action="camera" data-value="overhead">${icon('map', 15)} Top view</button><button data-action="camera" data-value="follow">${icon('eye', 15)} Follow</button></div><div class="view-tools"><button class="icon-button" data-action="reference-map" id="reference-map-toggle" aria-label="Toggle reference image" title="Toggle reference image" hidden>${icon('map', 16)}</button><button class="icon-button" data-action="undo" id="undo" aria-label="Undo edit">${icon('undo', 16)}</button><button class="icon-button" data-action="redo" id="redo" aria-label="Redo edit">${icon('redo', 16)}</button><span></span><button class="icon-button active" data-action="coverage" aria-label="Toggle radar coverage" title="Radar coverage">${icon('radar', 16)}</button><button class="icon-button active" data-action="routes" aria-label="Toggle route lines" title="Routes">${icon('layers', 16)}</button><button class="icon-button active" data-action="labels" aria-label="Toggle vehicle labels" title="Labels">${icon('eye', 16)}</button></div></div>
       <div class="defence-hud" id="defence-hud"></div>
+      <div class="breach" id="breach" aria-hidden="true"><span>IMPACT</span></div>
       <div class="render-switch" role="group" aria-label="Scene appearance"><span>RENDER MODE</span><button data-action="appearance" data-value="realistic" aria-pressed="false">${icon('globe', 14)} Realistic</button><button data-action="appearance" data-value="holographic" aria-pressed="false">${icon('layers', 14)} Holographic</button></div><div class="viewport-corners" aria-hidden="true"></div><div class="scene-caption"><span class="tiny-label">NORTHSTAR TEST RANGE</span><h1>Every scenario starts here.</h1><p id="scene-description"></p></div>
       <div class="viewport-status"><span class="status-pill" id="run-status"><i></i> READY</span><span class="seed-tag" id="seed-label"></span></div><span id="asset-status" class="asset-status" role="status" data-state="loading">Loading scenery…</span>
       <div class="compass"><span>N</span><svg viewBox="0 0 40 40"><path d="m20 5 6 25-6-5-6 5Z" fill="#40575c"/><path d="m20 5 0 20-6 5Z" fill="#91a59c"/></svg></div>
@@ -105,7 +108,7 @@ $('#app').innerHTML = `
 
 function toast(message: string) { clearTimeout(toastTimer); $('#toast').textContent = message; $('#toast').classList.add('visible'); toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 4500); }
 function persist() { try { localStorage.setItem('airfield.scenario.v1', JSON.stringify(scenario)); $('#save-status').textContent = 'Saved locally'; } catch { $('#save-status').textContent = 'Export to save'; toast('Browser storage is unavailable or full. Export your scenario to keep a copy.'); } }
-function resetRun() { replayRecord = undefined; replayPlaying = false; playing = false; liveHistory = []; send({ type: 'load', scenario }); world?.setRunning(false); $('#scrub').removeAttribute('style'); ($('#scrub') as HTMLInputElement).disabled = true; ($('#scrub') as HTMLInputElement).max = String(scenario.duration); }
+function resetRun() { breaches = 0; $('#breach')?.classList.remove('hit'); replayRecord = undefined; replayPlaying = false; playing = false; liveHistory = []; send({ type: 'load', scenario }); world?.setRunning(false); $('#scrub').removeAttribute('style'); ($('#scrub') as HTMLInputElement).disabled = true; ($('#scrub') as HTMLInputElement).max = String(scenario.duration); }
 function commit(change: (draft: ScenarioDocument) => void, message = 'Scenario updated. Run reset.') {
   try {
     const draft = clone(scenario); change(draft); validateScenario(draft); undoStack.push(clone(scenario)); if (undoStack.length > 40) undoStack.shift(); redoStack = []; scenario = draft;
@@ -310,6 +313,14 @@ function updateSnapshot(state: Snapshot, isPlaying: boolean) {
   $('.scene-caption').classList.toggle('minimized', state.time > 0);
   const unit = state.units.find(item => item.id === selected);
   if (unit && (!liveHistory.length || state.time - liveHistory[liveHistory.length - 1].time >= 0.95)) liveHistory.push({ time: state.time, battery: unit.battery, speed: unit.groundSpeed, altitude: unit.position.y });
+  // Something got through: wash the view red for a moment. Scrubbing back in replay re-arms it.
+  const through = state.logs.filter(entry => entry.kind === 'warning' && entry.label.includes('reached')).length;
+  if (through > breaches && state.time > 0) {
+    clearTimeout(breachTimer);
+    $('#breach').classList.remove('hit'); void $('#breach').offsetWidth; $('#breach').classList.add('hit');
+    breachTimer = setTimeout(() => $('#breach').classList.remove('hit'), 1600);
+  }
+  breaches = through;
   updateMetrics(state); renderDefenceHud();
   if (previousLogCount !== state.logs.length || state.time === 0) renderEvents(); if (panel === 'analysis') renderAnalytics();
 }

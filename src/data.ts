@@ -41,7 +41,7 @@ export function validateScenario(input: unknown): ScenarioDocument {
     if (item.defence !== undefined) {
       const defence = record(item.defence, 'Defence profile');
       if (item.role !== 'friendly') fail('Defence profile', 'only friendly drones can cover a station');
-      vector(defence.station, 'Station'); number(defence.heading, 'Station heading', 0, 360);
+      vector(defence.station, 'Station'); number(defence.heading, 'Station heading', 0, 360); number(defence.tilt, 'Boresight tilt', -90, 90);
       number(defence.engageRange, 'Engagement range', 0.5, 2000); text(defence.podId, 'Charging pod', 80, true);
       if (typeof defence.expendOnKill !== 'boolean') fail('Expend on kill', 'expected a boolean');
       number(defence.readyAt, 'Take station at', 0, 2400); number(defence.chargeWatts, 'Charge power', 0, 1000000);

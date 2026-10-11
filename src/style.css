@@ -213,3 +213,14 @@ dialog.image-map-dialog { width: 1120px; max-width: 96vw; }
 .brand-mark i { background: var(--accent); }
 .status-pill.running i { background: var(--accent); box-shadow: 0 0 0 3px #ccff3326; }
 .unit-label.selected { border-color: var(--accent); box-shadow: 0 2px 8px #ccff3340; }
+
+/* Something reached what the screen was covering. */
+.breach { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0; display: grid; place-items: center;
+  background: radial-gradient(ellipse at center, #ff2d0b00 35%, #e8240c4d 78%, #c81d0799 100%); }
+.breach span { font-family: var(--font-ui); font-size: 13px; letter-spacing: 0.22em; color: #fff;
+  background: #d8220a; border-radius: 3px; padding: 7px 14px; transform: translateY(-110px); box-shadow: 0 4px 20px #8c13004d; }
+.breach.hit { animation: breach-flash 1.6s ease-out forwards; }
+@keyframes breach-flash {
+  0% { opacity: 0; } 7% { opacity: 1; } 22% { opacity: .45; } 38% { opacity: .95; } 100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .breach.hit { animation: breach-flash 1.6s steps(2, end) forwards; } }

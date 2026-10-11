@@ -13,11 +13,13 @@ export type Sensor = { range: number; minRange: number; horizontalFov: number; v
 export type Patrol = { centre: Vec3; radius: number; altitude: number; phase: number };
 /**
  * Turns a drone into a covering sentry: where it waits, what it can see, how close it must get, and
- * what it does with the time before a departure. A sentry with a patrol flies the ring until
+ * what it does with the time before a departure. heading and tilt together aim the boresight:
+ * a post arched over the runway has to look down at it, not out along the horizon.
+ * A sentry with a patrol flies the ring until
  * readyAt; one without sits on its pod drawing charge. Both take station at readyAt.
  */
 export type Defence = {
-  station: Vec3; heading: number; sensor: Sensor; engageRange: number; podId: string; expendOnKill: boolean;
+  station: Vec3; heading: number; tilt: number; sensor: Sensor; engageRange: number; podId: string; expendOnKill: boolean;
   patrol?: Patrol; readyAt: number; chargeWatts: number;
 };
 /** A hostile that steers at a target each step instead of flying a fixed course. */

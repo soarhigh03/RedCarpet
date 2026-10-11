@@ -72,6 +72,15 @@ a { color: inherit; text-decoration: none; }
 .app-header .icon-button { color: #93a9b5; }
 .app-header .icon-button:hover { background: #1d3140; color: #6fe0c0; }
 
+/* Recording. The dot is the whole tell: steady when armed, pulsing while it runs. */
+.button.record { min-height: 31px; font-size: 13px; padding: 6px 11px; gap: 7px; background: transparent; border-color: #3c5364; color: #c3d6de; }
+.button.record:hover { background: #1d3140; border-color: #51707f; }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #d4784f; flex-shrink: 0; }
+.button.record.active { background: #7a3426; border-color: #a24a31; color: #ffe8df; }
+.button.record.active .rec-dot { background: #ff6a3d; animation: rec 1.4s ease-in-out infinite; }
+@keyframes rec { 50% { opacity: .2; } }
+.status-pill.recording i { background: #ff6a3d; box-shadow: 0 0 0 3px #ff6a3d26; }
+
 /* ── Viewport and scope overlays ──────────────────────────── */
 .workspace { display: block; position: relative; flex: 1; min-height: 0; overflow: hidden; }
 .viewport-wrap { position: absolute; inset: 0; background: #d9e4e6; }

@@ -8,6 +8,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { escapeHtml } from './data';
 import { SceneAssets } from './assets';
+import { Blasts } from './effects';
 import { IMAGE_MAP_DEPTH, IMAGE_MAP_WIDTH } from './image-map';
 import { type MapObject, type ScenarioDocument, type Snapshot, type Vec3, type Vehicle, type UnitState, isActive } from './types';
 
@@ -44,6 +45,9 @@ export class AirfieldScene {
   private envelopes = new Map<string, THREE.Group>();
   private tracks: THREE.LineSegments;
   private showCoverage = true;
+  private blasts = new Blasts();
+  /** Last status seen per unit, so a takedown can be spotted as a transition rather than a flag. */
+  private wasActive = new Map<string, boolean>();
   private objects = new Map<string, THREE.Group>();
   private units = new Map<string, THREE.Group>();
   private labels = new Map<string, HTMLElement>();
@@ -88,6 +92,7 @@ export class AirfieldScene {
     trackGeometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(75 * 6), 3));
     this.tracks = new THREE.LineSegments(trackGeometry, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, toneMapped: false }));
     this.tracks.frustumCulled = false; this.coverage.add(this.tracks);
+    this.scene.add(this.blasts.group);
     this.camera.position.set(1180, 1200, 1450); this.controls = new OrbitControls(this.camera, this.renderer.domElement); this.controls.target.set(-130, 0, 0); this.controls.enableDamping = true; this.controls.dampingFactor = 0.08; this.controls.maxPolarAngle = Math.PI / 2.1; this.controls.minDistance = 25; this.controls.maxDistance = 6500;
     this.transform = new TransformControls(this.camera, this.renderer.domElement); this.transform.setMode('translate'); this.transform.showY = false; this.transform.setSize(0.65); this.transform.setTranslationSnap(5); this.scene.add(this.transform.getHelper());
     this.transform.addEventListener('dragging-changed', event => { this.controls.enabled = !event.value; });
@@ -259,7 +264,7 @@ export class AirfieldScene {
     this.referencePlane.visible = Boolean(scenario.referenceMap?.visible && this.assets.referenceMap);
     for (const group of [this.scenery, this.actors, this.routes]) { dispose(group); group.clear(); }
     for (const envelope of this.envelopes.values()) { dispose(envelope); this.coverage.remove(envelope); }
-    this.envelopes.clear();
+    this.envelopes.clear(); this.wasActive.clear();
     this.objects.clear(); this.units.clear(); this.labels.clear(); this.labelLayer.replaceChildren();
     scenario.objects.forEach(item => {
       const group = this.mapObject(item); this.scenery.add(group); this.objects.set(item.id, group);
@@ -325,7 +330,16 @@ export class AirfieldScene {
     if (mode === 'orbit') { const distance = radius * 1.62; this.camera.position.set(centerX + distance * 0.57, distance * 0.52, centerZ + distance * 0.63); this.controls.target.set(centerX, 0, centerZ); }
     this.controls.update();
   }
-  update(snapshot: Snapshot) { this.lastSnapshot = snapshot; this.unitStates = snapshot.units; }
+  update(snapshot: Snapshot) {
+    this.lastSnapshot = snapshot; this.unitStates = snapshot.units;
+    // A hostile that stops having been active was just taken down: light it off where it died.
+    const now = performance.now() / 1000;
+    for (const unit of snapshot.units) {
+      const active = isActive(unit.status);
+      if (this.wasActive.get(unit.id) && !active && unit.status === 'stopped') this.blasts.spawn(unit.position, now);
+      this.wasActive.set(unit.id, active);
+    }
+  }
   setRoutes(visible: boolean) { this.routes.visible = visible; }
   setLabels(visible: boolean) { this.labelLayer.style.display = visible ? '' : 'none'; }
   setCoverage(visible: boolean) { this.showCoverage = visible; this.coverage.visible = visible; }
@@ -379,6 +393,7 @@ export class AirfieldScene {
       label.dataset.status = unit.status;
     });
     this.drawTracks();
+    this.blasts.update(now / 1000);
     const focused = this.units.get(this.selected) ?? this.objects.get(this.selected);
     this.selectedRing.visible = Boolean(focused && focused.visible);
     if (focused) {

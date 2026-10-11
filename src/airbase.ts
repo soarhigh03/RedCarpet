@@ -22,58 +22,89 @@ export function airbasePoint(u: number, v: number, y = 0): Vec3 {
 export const AIRBASE_RUNWAY = { length: 2700, width: 60, usable: 2400 };
 
 /**
- * The covering screen, sized for a 200 m sensor on a 35 m/s airframe.
+ * The screen is a vault, not two lines and not a ring.
  *
- * At 35 m/s with about 1.5 g, five seconds of warning buys a 134 m dash, so one post holds roughly
- * 134 m of the approach either side of itself. Two posts a layer cover the 500 m the departure is
- * vulnerable over. What forces the count up is the sensor's elevation beam: ±5° is a thin slab, so
- * the posts are stacked in three layers to cover a drone's descent rather than catch it at one
- * height. Twelve posts, four a layer, leaves margin on both.
+ * Take the runway centreline as an axis and arch the posts over it on a half cylinder of radius
+ * 150 m: the runway sits at the bottom of the arch and nothing ever stands on it. Sweeping the arc
+ * from one flank, over the top, to the other covers every bearing a run-in can arrive on without
+ * a horizontal orbit having to cross the strip.
+ *
+ * The arch spans the roll, from the threshold to just past rotation, and stops there. That is the
+ * only stretch where a 40 m/s drone can reach an aircraft at all, and keeping to it is what lets
+ * the radius come down: the jet is still under 10 m through all of it, so a 120 m arch clears it by
+ * more than 110 m everywhere. Carrying the vault on into the climb-out would need 145 m to hold the
+ * same margin over a jet already at 45 m, and 145 m is further than a sentry can dash in the five
+ * seconds its radar buys — the screen would be clear of the aeroplane and useless at the same time.
+ *
+ * 120 m also sits inside the sensor and inside the airframe: the longest slant down to the
+ * centreline is 118 m, and 45 m/s reaches 174 m in five seconds, leaving the dash real margin.
+ *
+ * The twenty posts take the twenty angles of a regular polygon around that arc, but stepped by a
+ * number coprime with twenty so consecutive posts along the runway land on opposite parts of the
+ * arch. Nobody is beside a neighbour; the nearest pair is over a hundred metres apart.
  */
-export const COVER_OFFSET = 70;
-/** Five layers, because a ±5° elevation beam is a slab and a run-in descends straight through it. */
-export const COVER_LAYERS = [15, 40, 65, 90, 115];
-export const COVER_ALTITUDE = COVER_LAYERS[0];
-export const COVER_POSTS = COVER_LAYERS.flatMap((height, layer) =>
-  [-640, -400].flatMap(u => [{ u, side: -1, height, layer }, { u, side: 1, height, layer }]));
+export const COVER_RADIUS = 120;
+export const COVER_SLOTS = 10;
+const ARC_FROM = 21, ARC_TO = 159;          // degrees, measured up from the east flank
+const ARC_STEP = 3;                           // coprime with the slot count, which scatters the angles
+export const COVER_POSTS = Array.from({ length: COVER_SLOTS }, (_, index) => {
+  const turn = ARC_FROM + ((index * ARC_STEP) % COVER_SLOTS) / COVER_SLOTS * (ARC_TO - ARC_FROM);
+  const radians = turn * Math.PI / 180;
+  return {
+    u: -1250 + index * (550 / (COVER_SLOTS - 1)),
+    v: Math.cos(radians) * COVER_RADIUS,
+    height: Math.sin(radians) * COVER_RADIUS,
+    turn,
+    side: Math.cos(radians) < 0 ? -1 : 1,
+  };
+});
+export const COVER_OFFSET = COVER_RADIUS;
+export const COVER_ALTITUDE = Math.round(Math.sin(ARC_FROM * Math.PI / 180) * COVER_RADIUS);
 /**
- * Each post looks outward, across the approach rather than at the runway it guards, and the layers
- * are fanned round the compass so no bearing is left to a single post.
+ * Aim. A ±5° elevation band is measured about wherever the boresight points, so a post arched over
+ * the strip has to tilt down onto it — pointed at the horizon it would only ever see things at its
+ * own height, which is the one place a run-in diving at the runway never is. Each post looks across
+ * and down at the centreline beneath it; near the crown that is very nearly straight down.
  */
-const sectorFor = (index: number, post: { side: number; layer: number }) =>
-  (post.side < 0 ? 270 : 90) + (post.layer - (COVER_LAYERS.length - 1) / 2) * 22 * post.side + (index % 2 ? 0 : 8);
+const AIM_AT = 10;   // m, the height on the centreline each boresight is laid on
+const sectorFor = (_index: number, post: { v: number; turn: number }) => 90 - post.turn;
+const tiltFor = (_post: { v: number; height: number }) => -20;
 /** Pods sit out in the clear bands either side; a sentry's home does not have to be under its post. */
-const podAt = (index: number, post: { side: number }) => ({ u: -700 + Math.floor(index / 2) * 110, v: post.side < 0 ? -215 : 360 });
+const podAt = (index: number, post: { side: number }) => ({ u: -1210 + Math.floor(index / 2) * 58, v: post.side < 0 ? -215 : 360 });
 
 /**
  * The pre-departure rotation.
  *
  * Closing the ring is a ratio, not a radius. A drone crossing a ring of radius r at speed w takes
  * r/w to reach the middle; n patrollers at speed v revisit a bearing every 2πr/(v·n). Setting one
- * against the other cancels r entirely, leaving n ≥ 2πw/v — eight, for a 40 m/s run-in against a
- * 35 m/s patroller, at any radius you like. Radius only buys warning time, so 300 m is chosen for
- * 7.5 s of it; the lap is 54 s and a bearing comes round every 6.7 s.
+ * against the other cancels r entirely, leaving n ≥ 2πw/v, which would be six here. But that
+ * is the condition for a ring with gaps in it; once each patroller's own envelope reaches as far as
+ * the ring is wide the gaps close instead, and the condition becomes n ≥ πr/R — four, for a 300 m
+ * sensor on a 300 m ring. Radius buys warning: 300 m is 7.5 s against a 40 m/s run-in. The lap is flown above
+ * the crown of the vault, so the one part of the pattern that is a horizontal circle still never
+ * crosses the strip at a height anything else is using.
  *
- * Eight up is also exactly what the batteries allow. A 40 minute pack against a 60 minute charge
- * sustains 40% of a fleet in the air, so eight flying wants twenty on strength: eight on the ring,
- * twelve on pods, and all twenty on station when a departure is called.
+ * Four up is also exactly what the batteries allow. A 40 minute pack against a 60 minute charge
+ * sustains 40% of a fleet in the air, so four flying wants ten on strength: four on the ring, six
+ * on pods, and all ten on station when a departure is called.
  */
 export const PATROL = {
-  radius: 300, altitude: 70, flying: 8,
-  lap: Math.round(2 * Math.PI * 300 / 35),
-  revisit: Math.round(2 * Math.PI * 300 / 35 / 8 * 10) / 10,
+  radius: 300, altitude: COVER_RADIUS + 60, flying: 4,
+  lap: Math.round(2 * Math.PI * 300 / 45),
+  revisit: Math.round(2 * Math.PI * 300 / 45 / 4 * 10) / 10,
 };
 export function coverPost(index: number) {
   const post = COVER_POSTS[index];
   const pod = podAt(index, post);
   return {
     podId: `ab-pod-${index}`,
-    station: airbasePoint(post.u, post.side * COVER_OFFSET, post.height),
+    station: airbasePoint(post.u, post.v, post.height),
     pod: airbasePoint(pod.u, pod.v),
     heading: (AIRBASE_HEADING + sectorFor(index, post) + 360) % 360,
+    tilt: Math.max(-90, Math.min(90, tiltFor(post))),
     /** The first eight fly the ring; the rest wait on their pads. */
     patrol: index < PATROL.flying
-      ? { centre: airbasePoint(-500, 0, 0), radius: PATROL.radius, altitude: PATROL.altitude, phase: index / PATROL.flying * 360 }
+      ? { centre: airbasePoint(-980, 0, 0), radius: PATROL.radius, altitude: PATROL.altitude, phase: index / PATROL.flying * 360 }
       : undefined,
   };
 }

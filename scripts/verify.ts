@@ -4,9 +4,9 @@ import { performance } from 'node:perf_hooks';
 import { Simulation, powerAt, temperatureFactor } from '../src/simulation';
 import { makeScenario } from '../src/scenarios';
 import { buildImageScenario, exampleFootprints, objectOutline } from '../src/image-map';
-import { AIRBASE_HEADING, AIRBASE_RUNWAY, airbasePoint, COVER_POSTS, PATROL } from '../src/airbase';
+import { AIRBASE_HEADING, AIRBASE_RUNWAY, airbasePoint, COVER_POSTS, COVER_RADIUS, PATROL } from '../src/airbase';
 import { AIRBASE_AIM, F35A, FORM_UP_LEAD, rollWave } from '../src/scenarios';
-import { AWR2944P, closestApproach, contact, crossingPoint, DEFAULT_THREAT, URAD_INDUSTRIAL_V2 } from '../src/defence';
+import { AWR2944P, closestApproach, contact, COUNTER_UAS, crossingPoint, DEFAULT_THREAT, URAD_INDUSTRIAL_V2 } from '../src/defence';
 import { csv, validateRun, validateScenario } from '../src/data';
 import { clone, STEP, type ScenarioDocument } from '../src/types';
 
@@ -142,7 +142,7 @@ check('The screen covers the centreline, with the fleet split between ring and p
   for (const sentry of sentries) {
     const defence = sentry.defence!;
     assert.equal(sentry.departAt, 0);
-    assert.deepEqual(defence.sensor, AWR2944P);
+    assert.deepEqual(defence.sensor, COUNTER_UAS);
     assert(pods.has(defence.podId));
     assert.equal(defence.readyAt, departure - FORM_UP_LEAD, 'takes station ahead of the roll');
     // The centreline abeam each post has to be inside the envelope for the post to be worth having.
@@ -155,8 +155,27 @@ check('The screen covers the centreline, with the fleet split between ring and p
     const dash = sentry.speed ** 2 / (2 * sentry.acceleration) + sentry.speed * (warning - ramp);
     assert(dash > 100, `a ${sentry.speed} m/s post reaches ${Math.round(dash)} m inside the warning`);
   }
-  // Posts are stacked, because a +/-5 degree elevation beam is a slab and a run-in descends through it.
-  assert(new Set(sentries.map(sentry => Math.round(sentry.defence!.station.y))).size >= 3, 'altitude layers');
+  // The screen is an arch over the strip, not a ring through it and not a line beside it.
+  const axisOf = AIRBASE_HEADING * Math.PI / 180;
+  let nearestPair = Infinity;
+  for (let a = 0; a < sentries.length; a++) for (let b = a + 1; b < sentries.length; b++) {
+    const one = sentries[a].defence!.station; const two = sentries[b].defence!.station;
+    nearestPair = Math.min(nearestPair, Math.hypot(one.x - two.x, one.y - two.y, one.z - two.z));
+  }
+  assert(nearestPair > 80, `posts spread like a polygon, nearest pair ${Math.round(nearestPair)} m`);
+  for (const sentry of sentries) {
+    const defence = sentry.defence!;
+    const east = defence.station.x - AIRBASE_AIM.x; const north = defence.station.z - AIRBASE_AIM.z;
+    const across = east * Math.cos(axisOf) + north * Math.sin(axisOf);
+    // Every post sits on the half cylinder, so none of them is ever over the runway itself.
+    assert(Math.abs(Math.hypot(across, defence.station.y) - COVER_RADIUS) < 2, 'on the arch');
+    assert(defence.station.y > 30, 'above the strip, not beside it on the deck');
+  }
+  // Mirrored angles share a height by construction, so identity is the whole station, not the height.
+  assert.equal(new Set(sentries.map(sentry => Object.values(sentry.defence!.station).map(Math.round).join())).size, sentries.length, 'no two posts in one place');
+  // The datasheet parts stay in the file and stay honest: neither can look down off the arch.
+  assert(AWR2944P.verticalFov < 30 && URAD_INDUSTRIAL_V2.range < 100);
+  assert(COUNTER_UAS.verticalFov >= 60 && COUNTER_UAS.range >= 250, 'the flown head is a wide-field one');
 });
 check('The fleet patrols and charges, then takes station before the roll', () => {
   const scenario = makeScenario('airbase');
@@ -181,13 +200,18 @@ check('The fleet patrols and charges, then takes station before the roll', () =>
   assert.equal(formed('patrol') + formed('charge'), 0, 'everyone leaves the rotation at readyAt');
   assert(formed('hold') + formed('return') + formed('intercept') === COVER_POSTS.length);
   // The ring is sized so a bearing is revisited inside the time an inbound drone needs to cross it.
-  const lap = 2 * Math.PI * PATROL.radius / 35;
+  const patrolSpeed = scenario.vehicles.find(vehicle => vehicle.defence)!.speed;
+  const lap = 2 * Math.PI * PATROL.radius / patrolSpeed;
   assert.equal(Math.round(lap), PATROL.lap);
-  // Closing the ring is a ratio: n >= 2*pi*w/v, independent of the radius it is flown at.
-  assert(PATROL.flying >= 2 * Math.PI * 40 / 35, 'enough on the ring to close it against 40 m/s');
-  assert(lap / PATROL.flying < PATROL.radius / 40, 'a bearing comes round before a drone can cross');
+  // A ring with gaps needs n >= 2*pi*w/v to sweep them before anything crosses. Once each envelope
+  // reaches as far as the ring is wide there are no gaps at all, and n >= pi*r/R is what binds.
+  const sensor = scenario.vehicles.find(vehicle => vehicle.defence)!.defence!.sensor;
+  assert(PATROL.flying >= Math.PI * PATROL.radius / sensor.range, 'enough on the ring to leave no gap in it');
+  // And the lap is flown above the crown of the vault, so the one circular part of the pattern
+  // never crosses the strip at a height anything else is working at.
+  assert(PATROL.altitude > COVER_RADIUS, 'the lap clears the arch');
   assert.equal(Math.round(lap / PATROL.flying * 10) / 10, PATROL.revisit);
-  // And eight up is what a 40 min pack against a 60 min charge sustains from a fleet this size.
+  // And four up is what a 40 min pack against a 60 min charge sustains from a fleet this size.
   assert(Math.abs(PATROL.flying / COVER_POSTS.length - 40 / (40 + 60)) < 0.02, 'the split matches the duty cycle');
 });
 check('A hostile wave is guided onto the departure, not flown on a fixed course', () => {
