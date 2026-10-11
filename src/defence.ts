@@ -164,7 +164,7 @@ const draw = (value: number) => { const noise = Math.sin(value * 12.9898 + 78.23
 const between = (value: number, low: number, high: number) => low + value * (high - low);
 
 export const DEFAULT_THREAT: ThreatPlan = {
-  count: 8, seed: 20482, speedMin: 24, speedMax: 58,
+  count: 2, seed: 20482, speedMin: 46, speedMax: 54,
   altitudeMin: 40, altitudeMax: 110, standoff: 1500, window: 12, weave: 420, strikeAt: 76,
 };
 
