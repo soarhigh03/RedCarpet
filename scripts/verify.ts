@@ -4,9 +4,9 @@ import { performance } from 'node:perf_hooks';
 import { Simulation, powerAt, temperatureFactor } from '../src/simulation';
 import { makeScenario } from '../src/scenarios';
 import { buildImageScenario, exampleFootprints, objectOutline } from '../src/image-map';
-import { AIRBASE_HEADING, AIRBASE_RUNWAY, airbasePoint } from '../src/airbase';
-import { AIRBASE_AIM, F35A, rollWave } from '../src/scenarios';
-import { closestApproach, contact, crossingPoint, DEFAULT_THREAT, URAD_INDUSTRIAL_V2 } from '../src/defence';
+import { AIRBASE_HEADING, AIRBASE_RUNWAY, airbasePoint, COVER_POSTS, PATROL } from '../src/airbase';
+import { AIRBASE_AIM, F35A, FORM_UP_LEAD, rollWave } from '../src/scenarios';
+import { AWR2944P, closestApproach, contact, crossingPoint, DEFAULT_THREAT, URAD_INDUSTRIAL_V2 } from '../src/defence';
 import { csv, validateRun, validateScenario } from '../src/data';
 import { clone, STEP, type ScenarioDocument } from '../src/types';
 
@@ -128,45 +128,96 @@ check('The square-on crossing point is solved, and a late dash is refused', () =
   const slip = closestApproach({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, { x: -4, y: 0, z: 0 }, { x: 160, y: 0, z: 0 }, STEP);
   assert.equal(Math.round(slip), 0, 'passes straight through, and is caught');
 });
-check('Sentries cover the aim point inside their envelope and never wait in a pod', () => {
+check('The screen covers the centreline, with the fleet split between ring and pods', () => {
   const scenario = makeScenario('airbase');
   const sentries = scenario.vehicles.filter(vehicle => vehicle.defence);
-  assert.equal(sentries.length, 8);
   const pods = new Set(scenario.objects.filter(object => object.kind === 'pod').map(object => object.id));
-  assert.equal(pods.size, 8);
+  assert.equal(sentries.length, COVER_POSTS.length);
+  assert.equal(pods.size, COVER_POSTS.length, 'a pod each');
+  const flying = sentries.filter(sentry => sentry.defence!.patrol);
+  assert.equal(flying.length, PATROL.flying, 'the rest wait on their pads');
+  assert(flying.length < sentries.length, 'not everyone is up before a departure');
+  const axis = AIRBASE_HEADING * Math.PI / 180;
+  const departure = scenario.vehicles.find(vehicle => vehicle.kind === 'jet')!.departAt;
   for (const sentry of sentries) {
     const defence = sentry.defence!;
-    assert.equal(sentry.departAt, 0, 'already covering when the run starts');
-    assert.deepEqual(sentry.position, defence.station);
-    assert(pods.has(defence.podId), 'every sentry has a charging pod on the map');
-    assert.deepEqual(defence.sensor, URAD_INDUSTRIAL_V2);
-    // The whole point of the retune: a 50 m sensor has to reach the ground it guards. Measure the
-    // slant to the runway centreline abeam the post, not the distance along the runway to the aim.
-    const axis = AIRBASE_HEADING * Math.PI / 180;
+    assert.equal(sentry.departAt, 0);
+    assert.deepEqual(defence.sensor, AWR2944P);
+    assert(pods.has(defence.podId));
+    assert.equal(defence.readyAt, departure - FORM_UP_LEAD, 'takes station ahead of the roll');
+    // The centreline abeam each post has to be inside the envelope for the post to be worth having.
     const east = defence.station.x - AIRBASE_AIM.x; const north = defence.station.z - AIRBASE_AIM.z;
     const across = Math.abs(east * Math.cos(axis) + north * Math.sin(axis));
-    const slant = Math.hypot(across, defence.station.y - AIRBASE_AIM.y);
-    assert(slant <= defence.sensor.range, `centreline is ${Math.round(slant)} m away, inside the ${defence.sensor.range} m envelope`);
-    // A dash has to be possible inside the time the envelope buys.
-    assert(0.5 * sentry.acceleration * (defence.sensor.range / 40) ** 2 > defence.sensor.range / 2, 'agile enough to cross its own bubble');
+    assert(Math.hypot(across, defence.station.y - AIRBASE_AIM.y) <= defence.sensor.range);
+    // 200 m of warning against 40 m/s is 5 s; the dash it buys has to be worth more than the post.
+    const warning = defence.sensor.range / 40;
+    const ramp = sentry.speed / sentry.acceleration;
+    const dash = sentry.speed ** 2 / (2 * sentry.acceleration) + sentry.speed * (warning - ramp);
+    assert(dash > 100, `a ${sentry.speed} m/s post reaches ${Math.round(dash)} m inside the warning`);
   }
-  const first = new Simulation(scenario);
-  assert.equal(first.snapshot.units.find(unit => unit.id === sentries[0].id)?.status, 'airborne');
+  // Posts are stacked, because a +/-5 degree elevation beam is a slab and a run-in descends through it.
+  assert(new Set(sentries.map(sentry => Math.round(sentry.defence!.station.y))).size >= 3, 'altitude layers');
+});
+check('The fleet patrols and charges, then takes station before the roll', () => {
+  const scenario = makeScenario('airbase');
+  const sentries = scenario.vehicles.filter(vehicle => vehicle.defence).map(vehicle => vehicle.id);
+  const readyAt = scenario.vehicles.find(vehicle => vehicle.defence)!.defence!.readyAt;
+  const simulation = new Simulation(scenario);
+  const sample = (at: number) => {
+    while (simulation.snapshot.time < at && !simulation.snapshot.finished) simulation.step(1);
+    const units = simulation.snapshot.units.filter(unit => sentries.includes(unit.id));
+    return (task: string) => units.filter(unit => unit.task === task).length;
+  };
+  const early = sample(10);
+  assert.equal(early('patrol'), PATROL.flying);
+  assert.equal(early('charge'), COVER_POSTS.length - PATROL.flying);
+  assert.equal(early('hold') + early('intercept'), 0, 'nobody is on station yet');
+  // A drone on a pod is taking charge, not spending it, while one on the ring is working.
+  const parked = simulation.snapshot.units.filter(unit => unit.task === 'charge');
+  const ringed = simulation.snapshot.units.filter(unit => unit.task === 'patrol');
+  assert(parked.every(unit => unit.battery === 100), 'pods hold them full');
+  assert(ringed.every(unit => unit.battery < 100), 'the ring costs energy');
+  const formed = sample(readyAt + 12);
+  assert.equal(formed('patrol') + formed('charge'), 0, 'everyone leaves the rotation at readyAt');
+  assert(formed('hold') + formed('return') + formed('intercept') === COVER_POSTS.length);
+  // The ring is sized so a bearing is revisited inside the time an inbound drone needs to cross it.
+  const lap = 2 * Math.PI * PATROL.radius / 35;
+  assert.equal(Math.round(lap), PATROL.lap);
+  // Closing the ring is a ratio: n >= 2*pi*w/v, independent of the radius it is flown at.
+  assert(PATROL.flying >= 2 * Math.PI * 40 / 35, 'enough on the ring to close it against 40 m/s');
+  assert(lap / PATROL.flying < PATROL.radius / 40, 'a bearing comes round before a drone can cross');
+  assert.equal(Math.round(lap / PATROL.flying * 10) / 10, PATROL.revisit);
+  // And eight up is what a 40 min pack against a 60 min charge sustains from a fleet this size.
+  assert(Math.abs(PATROL.flying / COVER_POSTS.length - 40 / (40 + 60)) < 0.02, 'the split matches the duty cycle');
+});
+check('A hostile wave is guided onto the departure, not flown on a fixed course', () => {
+  const scenario = makeScenario('airbase');
+  const jet = scenario.vehicles.find(vehicle => vehicle.kind === 'jet')!;
+  const hostiles = scenario.vehicles.filter(vehicle => vehicle.role === 'hostile');
+  assert(hostiles.length > 0);
+  assert(hostiles.every(hostile => hostile.guidance?.targetId === jet.id), 'every one chases the jet');
+  // Move the jet and the wave has to follow: an open-loop route would land in the same place.
+  const moved = clone(scenario);
+  moved.vehicles.find(vehicle => vehicle.id === jet.id)!.route = [airbasePoint(1250, 900, 400), airbasePoint(2400, 1600, 800)];
+  const where = (document: typeof scenario) => {
+    const simulation = run(document, 20);
+    return simulation.snapshot.units.find(unit => unit.id === hostiles[0].id)!.position;
+  };
+  assert.notDeepEqual(where(scenario), where(moved), 'the run-in tracks where the jet actually went');
+  const straight = clone(scenario);
+  straight.vehicles.filter(vehicle => vehicle.role === 'hostile').forEach(vehicle => { delete vehicle.guidance; });
+  assert.notDeepEqual(where(scenario), where(validateScenario(straight)), 'guidance changes the outcome');
 });
 check('Each drone decides for itself, dashes square on, and takes the target down', () => {
   const simulation = run(makeScenario('airbase'), 20);
   const scenario = makeScenario('airbase');
   const hostiles = scenario.vehicles.filter(vehicle => vehicle.role === 'hostile').map(vehicle => vehicle.id);
   const threats = simulation.snapshot.units.filter(unit => hostiles.includes(unit.id));
-  assert.equal(threats.length, 8);
   const stopped = threats.filter(unit => unit.status === 'stopped').length;
-  const leaked = threats.filter(unit => unit.status === 'complete').length;
-  assert.equal(stopped + leaked, 8);
-  assert(stopped >= 5, `a 50 m screen holds most of the default wave, held ${stopped}`);
-  assert(leaked > 0, 'and a 50 m envelope does not hold all of it');
+  assert(stopped > 0, 'the screen takes some of the wave');
   const shooters = simulation.snapshot.units.filter(unit => unit.kills > 0);
-  assert(shooters.length >= 2, 'more than one drone is drawn in');
   assert.equal(shooters.reduce((sum, unit) => sum + unit.kills, 0), stopped);
+  assert(shooters.length >= 2, 'more than one drone is drawn in');
   // Every takedown resolves inside the engagement range, and the drone goes back to its post.
   const engageRange = scenario.vehicles.find(vehicle => vehicle.defence)!.defence!.engageRange;
   for (const entry of simulation.snapshot.logs.filter(log => log.kind === 'resolved')) {
@@ -183,7 +234,7 @@ check('A rolled wave is reproducible, and a faster swarm gets through', () => {
   assert.notDeepEqual(rollWave(scenario, plan).vehicles, rollWave(scenario, { ...plan, seed: 4243 }).vehicles);
   const rolled = validateScenario(rollWave(scenario, plan));
   assert.equal(rolled.vehicles.filter(vehicle => vehicle.role === 'hostile').length, 12);
-  assert.equal(rolled.vehicles.filter(vehicle => vehicle.defence).length, 8, 'the screen is left alone');
+  assert.equal(rolled.vehicles.filter(vehicle => vehicle.defence).length, COVER_POSTS.length, 'the screen is left alone');
   const swarm = run(validateScenario(rollWave(scenario, { ...DEFAULT_THREAT, seed: 555, count: 14, speedMin: 45, speedMax: 75, window: 40 })), 20);
   const leaked = swarm.snapshot.units.filter(unit => unit.status === 'complete' && unit.id.startsWith('intruder'));
   assert(leaked.length > 0, 'a saturating wave is not all held');

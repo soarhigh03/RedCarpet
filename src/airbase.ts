@@ -22,33 +22,59 @@ export function airbasePoint(u: number, v: number, y = 0): Vec3 {
 export const AIRBASE_RUNWAY = { length: 2700, width: 60, usable: 2400 };
 
 /**
- * The covering screen, laid out for a 50 m sensor.
+ * The covering screen, sized for a 200 m sensor on a 35 m/s airframe.
  *
- * A 50 m envelope cannot hold a line: it holds a bubble. Posted 100 m off the centreline the
- * sentries could not see the runway at all, so they stand 40 m out at 20 m, close enough that the
- * slant range to the centreline below them is about 45 m, and tight enough along the runway that
- * neighbouring bubbles overlap. Four a side bracket the stretch the departures roll through and the
- * run-ins are aimed at. They are already airborne before a departure rather than launching when
- * something shows up, and each has a charging pod on the ground, off the pavement.
+ * At 35 m/s with about 1.5 g, five seconds of warning buys a 134 m dash, so one post holds roughly
+ * 134 m of the approach either side of itself. Two posts a layer cover the 500 m the departure is
+ * vulnerable over. What forces the count up is the sensor's elevation beam: ±5° is a thin slab, so
+ * the posts are stacked in three layers to cover a drone's descent rather than catch it at one
+ * height. Twelve posts, four a layer, leaves margin on both.
  */
-export const COVER_OFFSET = 40;
-export const COVER_ALTITUDE = 20;
-export const COVER_POSTS = [-620, -540, -460, -380].flatMap(u => [{ u, side: -1 }, { u, side: 1 }]);
+export const COVER_OFFSET = 70;
+/** Five layers, because a ±5° elevation beam is a slab and a run-in descends straight through it. */
+export const COVER_LAYERS = [15, 40, 65, 90, 115];
+export const COVER_ALTITUDE = COVER_LAYERS[0];
+export const COVER_POSTS = COVER_LAYERS.flatMap((height, layer) =>
+  [-640, -400].flatMap(u => [{ u, side: -1, height, layer }, { u, side: 1, height, layer }]));
 /**
- * Each post looks outward, across the approach rather than at the runway it guards: a threat comes
- * from outside, and the 20° wedge a 160° sensor cannot see is the one pointing in. The end posts
- * are angled along the runway so the eight together leave no blind bearing.
+ * Each post looks outward, across the approach rather than at the runway it guards, and the layers
+ * are fanned round the compass so no bearing is left to a single post.
  */
-const SECTORS = [240, 120, 260, 100, 280, 80, 300, 60];
+const sectorFor = (index: number, post: { side: number; layer: number }) =>
+  (post.side < 0 ? 270 : 90) + (post.layer - (COVER_LAYERS.length - 1) / 2) * 22 * post.side + (index % 2 ? 0 : 8);
 /** Pods sit out in the clear bands either side; a sentry's home does not have to be under its post. */
-const podAt = (post: { u: number; side: number }) => ({ u: post.u - 30, v: post.side < 0 ? -215 : 360 });
+const podAt = (index: number, post: { side: number }) => ({ u: -700 + Math.floor(index / 2) * 110, v: post.side < 0 ? -215 : 360 });
+
+/**
+ * The pre-departure rotation.
+ *
+ * Closing the ring is a ratio, not a radius. A drone crossing a ring of radius r at speed w takes
+ * r/w to reach the middle; n patrollers at speed v revisit a bearing every 2πr/(v·n). Setting one
+ * against the other cancels r entirely, leaving n ≥ 2πw/v — eight, for a 40 m/s run-in against a
+ * 35 m/s patroller, at any radius you like. Radius only buys warning time, so 300 m is chosen for
+ * 7.5 s of it; the lap is 54 s and a bearing comes round every 6.7 s.
+ *
+ * Eight up is also exactly what the batteries allow. A 40 minute pack against a 60 minute charge
+ * sustains 40% of a fleet in the air, so eight flying wants twenty on strength: eight on the ring,
+ * twelve on pods, and all twenty on station when a departure is called.
+ */
+export const PATROL = {
+  radius: 300, altitude: 70, flying: 8,
+  lap: Math.round(2 * Math.PI * 300 / 35),
+  revisit: Math.round(2 * Math.PI * 300 / 35 / 8 * 10) / 10,
+};
 export function coverPost(index: number) {
   const post = COVER_POSTS[index];
+  const pod = podAt(index, post);
   return {
     podId: `ab-pod-${index}`,
-    station: airbasePoint(post.u, post.side * COVER_OFFSET, COVER_ALTITUDE),
-    pod: airbasePoint(podAt(post).u, podAt(post).v),
-    heading: (AIRBASE_HEADING + SECTORS[index] + 360) % 360,
+    station: airbasePoint(post.u, post.side * COVER_OFFSET, post.height),
+    pod: airbasePoint(pod.u, pod.v),
+    heading: (AIRBASE_HEADING + sectorFor(index, post) + 360) % 360,
+    /** The first eight fly the ring; the rest wait on their pads. */
+    patrol: index < PATROL.flying
+      ? { centre: airbasePoint(-500, 0, 0), radius: PATROL.radius, altitude: PATROL.altitude, phase: index / PATROL.flying * 360 }
+      : undefined,
   };
 }
 
@@ -99,9 +125,9 @@ export function airbaseObjects(): MapObject[] {
     add(`shelter-b-${index}`, `Shelter B${String(index + 1).padStart(2, '0')}`, 'hangar', u, 560, 40, 14, 32, -90);
   }
 
-  // Charging pods for the covering screen, one behind each post and clear of the pavement.
+  // Charging pods for the covering screen, one per post and clear of the pavement.
   COVER_POSTS.forEach((post, index) => {
-    const pod = podAt(post);
+    const pod = podAt(index, post);
     add(`pod-${index}`, `Charging pod ${String(index + 1).padStart(2, '0')}`, 'pod', pod.u, pod.v, 18, 3, 18);
   });
 

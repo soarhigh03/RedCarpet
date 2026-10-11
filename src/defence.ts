@@ -24,7 +24,32 @@ export const URAD_INDUSTRIAL_V2: Sensor = {
   velocityRange: 45,      // m/s, beyond which a closing rate is not measured
 };
 
+/**
+ * Sensor envelope from the published TI AWR2944P EVM figures: a 76–81 GHz automotive imaging
+ * front end, 4TX/4RX, azimuth 6 dB beamwidth about ±45° and elevation 6 dB about ±5°. Range
+ * depends entirely on configuration and target, so 200 m is the working figure used here.
+ *
+ * The elevation beam is the thing to notice. ±5° is ±17 m of height at 200 m and ±9 m at 100 m, so
+ * this sensor sees a thin horizontal slab rather than a dome: a drone diving on the runway crosses
+ * it instead of sitting in it, and covering the descent takes posts stacked in altitude layers.
+ */
+export const AWR2944P: Sensor = {
+  range: 200, minRange: 0.5,
+  horizontalFov: 90, verticalFov: 10,
+  rangeResolution: 0.05, rangeAccuracy: 0.05, velocityRange: 90,
+};
+
 export const DEGREES = 180 / Math.PI;
+export const length3 = (v: Vec3) => Math.hypot(v.x, v.y, v.z);
+export const unit3 = (v: Vec3): Vec3 => { const n = length3(v) || 1; return { x: v.x / n, y: v.y / n, z: v.z / n }; };
+/** Rotate `from` toward `to` by at most `limit` radians, keeping it a unit vector. */
+export function steer(from: Vec3, to: Vec3, limit: number): Vec3 {
+  const dot = Math.max(-1, Math.min(1, from.x * to.x + from.y * to.y + from.z * to.z));
+  const angle = Math.acos(dot);
+  if (!(angle > limit)) return to;
+  const share = limit / angle;
+  return unit3({ x: from.x + (to.x - from.x) * share, y: from.y + (to.y - from.y) * share, z: from.z + (to.z - from.z) * share });
+}
 /** Compass bearing of an east/north offset, in degrees, where north is -Z. */
 export const bearingOf = (east: number, north: number) => (Math.atan2(east, -north) * DEGREES + 360) % 360;
 /** Shortest signed turn from one bearing to another, in degrees. */
@@ -120,7 +145,7 @@ const between = (value: number, low: number, high: number) => low + value * (hig
 
 export const DEFAULT_THREAT: ThreatPlan = {
   count: 8, seed: 20482, speedMin: 24, speedMax: 58,
-  altitudeMin: 40, altitudeMax: 110, standoff: 1500, window: 90, weave: 420,
+  altitudeMin: 40, altitudeMax: 110, standoff: 1500, window: 12, weave: 420, strikeAt: 76,
 };
 
 /**
@@ -139,7 +164,10 @@ export function rollThreats(plan: ThreatPlan, aim: Vec3, base: (index: number) =
     vehicle.position = { x: aim.x + Math.sin(radians) * standoff, y: altitude, z: aim.z - Math.cos(radians) * standoff };
     vehicle.speed = Math.round(speed * 10) / 10;
     vehicle.maxSpeed = Math.max(vehicle.speed, Math.round(speed * 1.2 * 10) / 10);
-    vehicle.departAt = Math.round(between(draw(key + 13), 0, plan.window) * 10) / 10;
+    // Released so the run-in converges on the strike time, not on the clock: a wave that arrives
+    // before the aircraft moves is attacking an empty runway.
+    const arrive = plan.strikeAt + (draw(key + 13) - 0.5) * plan.window;
+    vehicle.departAt = Math.max(0, Math.round((arrive - standoff / speed) * 10) / 10);
     // Two weaving legs, then the aim point itself: a run-in, not a straight line.
     const leg = (fraction: number, offset: number, height: number) => ({
       x: aim.x + Math.sin(radians) * standoff * fraction + Math.cos(radians) * offset,

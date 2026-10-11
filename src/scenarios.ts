@@ -1,5 +1,5 @@
-import { AIRBASE_RUNWAY, airbaseObjects, airbasePoint, coverPost, COVER_POSTS } from './airbase';
-import { DEFAULT_THREAT, URAD_INDUSTRIAL_V2, rollThreats } from './defence';
+import { AIRBASE_RUNWAY, airbaseObjects, airbasePoint, coverPost, COVER_POSTS, PATROL } from './airbase';
+import { AWR2944P, DEFAULT_THREAT, rollThreats } from './defence';
 import { clone, type MapKind, type MapObject, type ScenarioDocument, type ThreatPlan, type Vehicle } from './types';
 
 function object(id: string, label: string, kind: MapKind, x: number, z: number, width: number, height: number, depth: number, rotation = 0): MapObject {
@@ -110,34 +110,56 @@ export function makeScenario(preset = 'successful'): ScenarioDocument {
 /** The point the wave is aimed at: the runway where the departures start their roll. */
 export const AIRBASE_AIM = airbasePoint(-500, 0, 10);
 
-/** A covering sentry: already on station, radar envelope from the I-79 figures, pod on the ground. */
-export function makeSentry(index: number): Vehicle {
+/** When the screen leaves the ring and the pods and takes station, ahead of the first departure. */
+export const FORM_UP_LEAD = 25;
+/**
+ * A covering sentry. 35 m/s and about 1.5 g: fast enough that 200 m of warning converts into a
+ * 134 m dash, which is what makes two posts a layer enough. Endurance is the Aurelia X4 LE figure,
+ * 40 minutes, against a pod that returns a pack in about an hour.
+ */
+export function makeSentry(index: number, readyAt = FORM_UP_LEAD): Vehicle {
   const post = coverPost(index);
   const sentry = makeVehicle(`sentry-${String(index + 1).padStart(2, '0')}`, 'friendly', index);
   sentry.label = `Sentry ${String(index + 1).padStart(2, '0')}`;
-  sentry.position = clone(post.station);
+  const start = post.patrol
+    ? airbasePoint(-500 + Math.cos(post.patrol.phase * Math.PI / 180) * post.patrol.radius, Math.sin(post.patrol.phase * Math.PI / 180) * post.patrol.radius, post.patrol.altitude)
+    : post.pod;
+  sentry.position = clone(start);
   sentry.route = [clone(post.station)];
   sentry.departAt = 0;
-  // A 50 m envelope leaves about a second to act, so the dash is all acceleration and no cruise.
-  // 45 m/s² is roughly 4.6 g — high, but inside what a small interceptor quad pulls.
-  sentry.speed = 42; sentry.maxSpeed = 60; sentry.climbRate = 40; sentry.acceleration = 45; sentry.batteryWh = 420;
-  sentry.powerCurve = [{ speed: 0, watts: 240 }, { speed: 20, watts: 380 }, { speed: 42, watts: 760 }, { speed: 60, watts: 1450 }];
-  sentry.defence = { station: clone(post.station), heading: post.heading, sensor: { ...URAD_INDUSTRIAL_V2 }, engageRange: 10, podId: post.podId, expendOnKill: false };
+  sentry.speed = 35; sentry.maxSpeed = 35; sentry.climbRate = 18; sentry.acceleration = 15;
+  sentry.batteryWh = 1100;   // 40 min of patrol at the cruise point of the curve below
+  sentry.powerCurve = [{ speed: 0, watts: 900 }, { speed: 18, watts: 1300 }, { speed: 35, watts: 2200 }];
+  sentry.defence = {
+    station: clone(post.station), heading: post.heading, sensor: { ...AWR2944P },
+    engageRange: 10, podId: post.podId, expendOnKill: false,
+    // Left off entirely rather than set undefined, so the document survives a JSON round trip.
+    ...(post.patrol ? { patrol: { ...post.patrol, centre: clone(post.patrol.centre) } } : {}),
+    readyAt, chargeWatts: 1100,   // a pack back in about an hour
+  };
   return sentry;
 }
-/** One ramming drone of a rolled wave. Course, speed, altitude and release time come from the plan. */
-export function makeIntruder(index: number): Vehicle {
+/**
+ * One ramming drone of a rolled wave. The rolled course is its run-in, but once the departure is
+ * moving it steers at the aircraft every step: leading it by the time to close, limited to a 3 g
+ * turn. A precomputed path cannot do this — against a target accelerating from 85 to 250 m/s any
+ * open-loop route is metres off within seconds.
+ */
+export function makeIntruder(index: number, chases = ''): Vehicle {
   const intruder = makeVehicle(`intruder-${String(index + 1).padStart(2, '0')}`, 'hostile', index);
   intruder.label = `Intruder ${String(index + 1).padStart(2, '0')}`;
-  intruder.batteryWh = 300; intruder.climbRate = 22;
+  intruder.batteryWh = 300; intruder.climbRate = 30; intruder.acceleration = 14;
   intruder.powerCurve = [{ speed: 0, watts: 220 }, { speed: 20, watts: 340 }, { speed: 45, watts: 880 }, { speed: 60, watts: 1500 }];
+  if (chases) intruder.guidance = { targetId: chases, lead: 10, turnRate: 55 };
   return intruder;
 }
 /** Replaces a scenario's hostile vehicles with a freshly rolled wave, leaving everything else alone. */
 export function rollWave(scenario: ScenarioDocument, plan: ThreatPlan, aim = AIRBASE_AIM): ScenarioDocument {
   const next = clone(scenario);
   next.threat = { ...plan };
-  next.vehicles = [...next.vehicles.filter(vehicle => vehicle.role !== 'hostile'), ...rollThreats(plan, aim, makeIntruder)];
+  // Every drone in the wave is guided onto the first departure it can find.
+  const quarry = next.vehicles.find(vehicle => vehicle.kind === 'jet')?.id ?? '';
+  next.vehicles = [...next.vehicles.filter(vehicle => vehicle.role !== 'hostile'), ...rollThreats(plan, aim, index => makeIntruder(index, quarry))];
   next.events = next.events.filter(event => next.vehicles.some(vehicle => vehicle.id === event.actorId));
   return next;
 }
@@ -152,7 +174,7 @@ function makeAirbaseScenario(): Partial<ScenarioDocument> {
     jet.label = `Kestrel 0${index + 1}`;
     jet.position = airbasePoint(-1150 - index * 95, 0, 5);
     jet.route = [airbasePoint(1250, 0, 320), airbasePoint(2400, 200, 760), airbasePoint(2500, -1600, 1050)];
-    jet.departAt = 20 + index * 90;
+    jet.departAt = 70 + index * 90;   // leaves a visible patrol-and-charge phase before the first roll
     jet.runwayLength = AIRBASE_RUNWAY.usable;
     return jet;
   });
@@ -160,9 +182,9 @@ function makeAirbaseScenario(): Partial<ScenarioDocument> {
     schemaVersion: 1,
     name: '서해 전술비행단 (가상)',
     description: 'A fictional tactical air base. Eight sentries cover the runway at 100 m with I-79 class imaging radar while three departures roll. A rolled wave of ramming drones runs in on random courses; the nearest free sentry is sent to each one it detects.',
-    seed: 7742, duration: 300,
+    seed: 7742, duration: 380,
     objects: airbaseObjects(),
-    vehicles: [...aircraft, ...COVER_POSTS.map((_, index) => makeSentry(index))],
+    vehicles: [...aircraft, ...COVER_POSTS.map((_, index) => makeSentry(index, aircraft[0].departAt - FORM_UP_LEAD))],
     events: [],
     // Wind travels toward 200, so a departure on runway 02 rolls into it, as it would be planned.
     weather: { windSpeed: 4, windDirection: 200, gusts: 2, temperature: 14, rain: 0, visibility: 14000 },

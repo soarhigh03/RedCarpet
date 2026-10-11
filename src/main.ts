@@ -164,9 +164,12 @@ function renderDefenceHud() {
   const leaked = threats.filter(unit => unit.status === 'complete').length;
   const crew = of(sentries.map(vehicle => vehicle.id));
   const engaged = crew.filter(unit => unit.task === 'intercept').length;
+  const ringing = crew.filter(unit => unit.task === 'patrol').length;
+  const charging = crew.filter(unit => unit.task === 'charge').length;
   const tracking = crew.reduce((sum, unit) => sum + unit.trackCount, 0);
   const cell = (label: string, value: string | number, tone = '') => `<div class="${tone}"><span>${label}</span><b>${value}</b></div>`;
-  hud.innerHTML = `${cell('INBOUND', inbound)}${cell('HOLDING', waiting)}${cell('TRACKED', tracking, tracking ? 'live' : '')}${cell('ENGAGING', engaged, engaged ? 'live' : '')}${cell('STOPPED', stopped, 'good')}${cell('LEAKED', leaked, leaked ? 'bad' : '')}<div class="hud-sentries"><span>SENTRIES</span><b>${crew.filter(unit => isActive(unit.status)).length}<small> / ${sentries.length}</small></b></div>`;
+  const rotating = ringing + charging;
+  hud.innerHTML = `${cell('INBOUND', inbound)}${cell('HOLDING', waiting)}${cell('TRACKED', tracking, tracking ? 'live' : '')}${cell('ENGAGING', engaged, engaged ? 'live' : '')}${cell('STOPPED', stopped, 'good')}${cell('LEAKED', leaked, leaked ? 'bad' : '')}<div class="hud-sentries"><span>${rotating ? 'RING / PODS' : 'ON STATION'}</span><b>${rotating ? `${ringing}<small> / ${charging}</small>` : `${crew.filter(unit => unit.task === 'hold' || unit.task === 'return' || unit.task === 'intercept').length}<small> / ${sentries.length}</small>`}</b></div>`;
 }
 /** Threat pane: the wave recipe, a re-roll, and the radar envelope the sentries are flying. */
 function renderThreatPane() {
@@ -184,13 +187,13 @@ function renderThreatPane() {
       <div class="form-grid">${number('Slowest · m/s', 'speedMin', plan.speedMin, 'any')}${number('Fastest · m/s', 'speedMax', plan.speedMax, 'any')}</div>
       <div class="form-grid">${number('Lowest · m', 'altitudeMin', plan.altitudeMin)}${number('Highest · m', 'altitudeMax', plan.altitudeMax)}</div>
       <div class="form-grid">${number('Release · m', 'standoff', plan.standoff)}${number('Window · s', 'window', plan.window)}</div>
-      ${number('Weave · m', 'weave', plan.weave)}
+      <div class="form-grid">${number('Weave · m', 'weave', plan.weave)}${number('Strike at · s', 'strikeAt', plan.strikeAt)}</div>
       <div class="threat-actions"><button class="button primary" type="submit">${icon('dice', 15)} Roll new wave</button></div>
-      <p class="dock-note">Every drone gets its own bearing, speed, altitude and release time from the seed, then runs a weaving course at the runway. Same seed, same wave.</p>
+      <p class="dock-note">Every drone gets its own bearing, speed, altitude and release time from the seed, then runs a weaving course in, timed so the wave converges on the strike time rather than on the clock. Same seed, same wave.</p>
     </form>
-    ${sensor ? `<div class="sensor-card"><div class="sensor-head">${icon('radar', 16)}<b>Sentry radar</b><small>${defenceUnits().length} on station</small></div>
+    ${sensor ? `<div class="sensor-card"><div class="sensor-head">${icon('radar', 16)}<b>Sentry radar</b><small>${defenceUnits().length} on strength</small></div>
       <dl><dt>Range</dt><dd>${sensor.minRange}–${sensor.range} m</dd><dt>Horizontal</dt><dd>±${sensor.horizontalFov / 2}° (${sensor.horizontalFov}°)</dd><dt>Vertical</dt><dd>±${sensor.verticalFov / 2}° (${sensor.verticalFov}°)</dd><dt>Resolution</dt><dd>${sensor.rangeResolution} m</dd><dt>Accuracy</dt><dd>±${sensor.rangeAccuracy} m</dd><dt>Engage</dt><dd>${sentry.defence!.engageRange} m</dd></dl>
-      <p class="dock-note">Envelope figures follow the published Ainstein I-79 imaging radar. A contact is only seen inside that cone, so where a sentry faces decides what it can find.</p></div>` : ''}`;
+      <p class="dock-note">Envelope figures follow the published TI AWR2944P. A contact is only seen inside that cone, so where a sentry faces decides what it can find; the elevation beam is narrow enough that the posts are stacked in layers.</p></div>` : ''}`;
   $('#threat-form').onsubmit = event => {
     event.preventDefault();
     const form = new FormData(event.currentTarget as HTMLFormElement);
@@ -198,7 +201,7 @@ function renderThreatPane() {
     try {
       const next: ThreatPlan = {
         count: Math.round(value('count')), seed: Math.round(value('seed')), speedMin: value('speedMin'), speedMax: value('speedMax'),
-        altitudeMin: value('altitudeMin'), altitudeMax: value('altitudeMax'), standoff: value('standoff'), window: value('window'), weave: value('weave'),
+        altitudeMin: value('altitudeMin'), altitudeMax: value('altitudeMax'), standoff: value('standoff'), window: value('window'), weave: value('weave'), strikeAt: value('strikeAt'),
       };
       const rolled = rollWave(scenario, next);
       commit(draft => Object.assign(draft, { vehicles: rolled.vehicles, events: rolled.events, threat: rolled.threat }), `Rolled ${next.count} inbound drones.`);

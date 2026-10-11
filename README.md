@@ -35,51 +35,36 @@ The GLBs have no animation clips or separate rigged mechanisms. The simulation m
 
 ## Covering screen and hard kill
 
-The point of the sandbox is where sentries stand and what gets through, not building scenery. The tactical air base scenario ships a screen of eight sentry drones and a rolled wave of ramming drones to run at it.
+The point of the sandbox is where sentries stand and what gets through, not building scenery. The tactical air base scenario ships a fleet of twenty sentry drones and a guided wave of ramming drones to run at it.
 
-**Sentries are already covering.** They do not wait in a pod and launch when something shows up; each one is airborne on its station before the run starts. Every post has a charging pod on the ground, clear of the pavement. The pods are physical map objects and each sentry references one, which is the hook for the charging-timing mechanism; nothing recharges yet.
+**Before a departure the fleet rotates.** Press play and most of it is not on station: eight drones fly a patrol ring and twelve sit on pods taking charge. Twenty-five seconds before the first roll they all leave the rotation and take station. Nothing recharges once it is up — the pods are where endurance comes back.
 
-**What a sentry can see** is the whole question. The envelope defaults to the published uRAD Industrial v2.0 figures (Anteral):
-
-| | |
-| --- | --- |
-| Frequency | 60–64 GHz |
-| Detection range | 50 m on a small drone |
-| Field of view | 160° × 160° |
-| Distance accuracy | ±1 mm |
-| Velocity measured to | 45 m/s, ±0.15 m/s |
-| Angle accuracy | 1° |
-
-The datasheet quotes maximum distance by target type — 70 m for a car, 40 m for a person — so 50 m is used here for a drone, between the two. Range resolution is not published separately and is set at the order of the accuracy figure.
-
-Two numbers dominate everything. **50 m is a bubble, not a line**: a sentry can only cover what it is nearly sitting on, which is why the posts stand 40 m off the centreline at 20 m rather than standing off, and why their spacing along the runway is set so neighbouring bubbles overlap. **45 m/s is the velocity ceiling**, and the intercept needs the target's velocity, so a drone closing faster than that is held on the radar but cannot be solved for and is reported as an unresolved track. The 160° field, by contrast, barely constrains anything: it is close to hemispherical, blind only in the 20° wedge directly behind, so the posts face outward across the approach rather than inward at the runway they guard.
-
-**The engagement is decided by each drone on its own.** There is no shared picture. Every step a sentry reads its own radar, classifies what it holds, and if it holds a hostile track *and is the closest of the sentries that also hold it*, it works out where that track crosses it — the foot of the perpendicular from itself onto the line the target is flying — and checks it can get there before the target does. Over a 50 m envelope there is about a second to act, so the move is a square-on dash onto the track rather than a pursuit curve; when the target is passing directly overhead or underneath, that dash is straight up or down. It then waits on the track and the takedown resolves on contact. The sentry returns to its post afterwards.
-
-A drone that flies its whole course without being stopped reached what it was aimed at, and is counted as a leak.
-
-**Rolling an attack.** The **Threat** panel holds the wave recipe: how many, how fast, how high, how far out they are released, and how wide the release window is. Rolling gives every drone its own bearing, speed, altitude, release time, weaving run-in, and impact point from the seed. The same plan and seed always produce the same wave, so you can move a sentry and replay the identical attack. The rolled drones become ordinary editable vehicles in the scenario.
-
-The scoreboard over the view tracks inbound, holding, tracked, engaging, stopped, and leaked. The default wave of eight loses six; a wave of the same shape at 18–30 m/s loses seven; waves carrying drones that close faster than 45 m/s lose two or three, with the rest logged as unresolved tracks and never engaged. That spread is the thing to tune — it is almost entirely a consequence of the two sensor numbers above.
-
-Catching anything at all at 50 m also costs agility. The sentries are specified at 45 m/s², about 4.6 g, which is high but inside what a small interceptor quad pulls; at the 7 m/s² a general-purpose drone has, a sentry covers 5 m in the second its sensor buys it and never reaches anything.
-
-## The departures
-
-The aircraft are F-35A Lightning IIs, flown on published open figures rather than invented ones:
+The split is not arbitrary. Closing a patrol ring is a ratio, not a radius: a drone crossing a ring of radius *r* at *w* takes *r/w* to reach the middle, and *n* patrollers at *v* revisit a bearing every *2πr/(v·n)*. Set one against the other and *r* cancels, leaving **n ≥ 2πw/v** — eight, for a 40 m/s run-in against a 35 m/s patroller, at any radius you choose. Radius only buys warning, so 300 m is picked for the 7.5 s it gives; the lap is 54 s and a bearing comes round every 6.7 s. Eight airborne is also exactly what the batteries allow: a 40 minute pack against a 60 minute charge sustains 40% of a fleet in the air, so eight flying wants twenty on strength.
 
 | | |
 | --- | --- |
-| Rotation | ~165 kt (85 m/s) |
-| Initial climb to 5,000 ft | 190 kt at 40,000 ft/min (203 m/s) |
-| Maximum speed | Mach 1.6 (~536 m/s) |
-| MTOW | 31,751 kg |
+| Patrol ring | 300 m radius, 70 m altitude |
+| Lap | 54 s at 35 m/s |
+| Revisit at any bearing | 6.7 s |
+| Drones to close the ring | 8 — `n ≥ 2πw/v`, independent of radius |
+| Sustainable airborne fraction | 40% (40 min pack, 60 min charge) |
+| Fleet | 20: eight on the ring, twelve on pods |
 
-**The take-off ground roll is not published.** Eurocontrol's performance database lists both V2 and the take-off distance as "no data", and Lockheed Martin and the USAF have not released a figure. Rather than invent one, the acceleration is derived from thrust to weight — one F135 at roughly 191 kN against a light internal-fuel load gives about 0.85 g of net accelerating force — which puts the roll near 440 m, and near 720 m at MTOW. The model rotates at 397 m with the 4 m/s headwind on the field, which is the right order for a light jet in afterburner. USAF wing policy avoids planned operations on runways under 8,000 ft (2,438 m); the base runway is 2,700 m and 2,500 m of it is marked usable.
+**What a sentry can see** defaults to the published TI AWR2944P EVM figures: 76–81 GHz, 4TX/4RX, azimuth 6 dB beamwidth about ±45°, elevation 6 dB about ±5°, and 200 m taken as the working range on a small drone. Range is not a published number for this part — it depends entirely on configuration and target — so it is the one figure here chosen rather than quoted. `URAD_INDUSTRIAL_V2` is kept alongside it in `src/defence.ts` if you want to compare a short-range wide-field module; swapping the sentry sensor is one constant.
 
-The climb figure is a capability ceiling, not what you will see. 40,000 ft/min is a maximum-performance number; the departure route here asks for a shallow climb, so the jets leave the runway at 3,300 ft/min and are passing 6,500 ft/min by 300 m as they accelerate. Departures roll on runway 02 into a wind travelling toward 200, as they would be planned.
+The elevation beam is what shapes the layout. ±5° is ±17 m of height at 200 m and ±9 m at 100 m, so the sensor sees a thin horizontal slab rather than a dome: a drone descending on the runway crosses it instead of sitting in it. That is why the posts are stacked in five altitude layers from 15 m to 115 m rather than spread along the ground.
 
-Everything downstream of those figures is this sandbox's simplified flight model — fixed 0.05 s steps, direct waypoint motion, an abstract energy budget that is not jet fuel — and the supplied jet artwork is a generic airframe, not an F-35 shape.
+**Speed decides how much of that range is usable.** 200 m of warning against a 40 m/s run-in is five seconds, and five seconds is only worth what the airframe can cross in it. At 35 m/s and about 1.5 g that is a 134 m dash, so two posts a layer cover the 500 m a departure is vulnerable over. At the 15.6 m/s of a survey quad the same five seconds buys 58 m and the same job needs three times the drones — the radar is rarely the thing to spend money on first.
+
+**The engagement is decided by each drone on its own.** There is no shared picture. Every step a sentry reads its own radar, classifies what it holds, and if it holds a hostile track *and is the closest of the sentries that also hold it that can actually make the crossing*, it works out where that track crosses it — the foot of the perpendicular from itself onto the line the target is flying — and checks it can get there before the target does. When the target is passing directly overhead or underneath, that dash is straight up or down. It then waits on the track and the takedown resolves on contact, swept over the step rather than sampled at its end.
+
+**The attackers are guided.** Each one steers at the departing aircraft every step, leading it by the time it takes to close and limited to a 3 g turn. This is not decoration: a precomputed route cannot chase a target accelerating from 85 to 250 m/s, and an open-loop path drifts metres within seconds from the acceleration ramp, climb clamps, waypoint corner-cutting and wind alone. Guidance has to live inside the step.
+
+That changes the problem completely. Against a fixed aim point the screen was most of the answer; against a guided threat chasing an F-35, the aircraft outruns almost everything. Over six rolled waves of eight the screen stops 18, sixteen get within 120 m of the jet, and **one** actually reaches it. Adding posts past about twelve stops changing the number — what binds is no longer coverage or count but the few seconds of the roll during which a 40 m/s drone can reach an aircraft at all.
+
+**Rolling an attack.** The **Threat** panel holds the wave recipe: how many, how fast, how high, how far out they are released, how wide the window is, and the strike time the wave is timed to converge on. Release is worked back from each drone's run-in, so a wave arrives when the aircraft is moving rather than at an empty runway. The same plan and seed always produce the same wave, so you can move a sentry and replay the identical attack.
+
+The scoreboard over the view tracks inbound, holding, tracked, engaging, stopped and leaked, and shows the ring-and-pods split until the screen forms up.
 
 ## Use the workspace
 
@@ -96,11 +81,11 @@ The header switches between **Simulate** and **Map setup**. Simulate is the tact
 
 ## Tactical air base example
 
-**Scenarios → Tactical air base** opens a larger fictional field, **서해 전술비행단 (가상)**. It is built from the general form of a single-runway tactical air base rather than from any survey or photograph: one 2,700 m runway on a 020° axis, taxiways paralleling it end to end, crossovers and turn pads, two combed rows of aircraft shelters on their own stubs, a maintenance apron with a hangar line, a support area with tower and barracks, fuel and munitions storage, eight sentry charging pods, and a perimeter road. Outside that road a generated woodland belt wraps the base on every side, clipped to clear the built field and to stop at the edge of the modelled ground. 173 map objects in all, about 4,700 trees among them.
+**Scenarios → Tactical air base** opens a larger fictional field, **서해 전술비행단 (가상)**. It is built from the general form of a single-runway tactical air base rather than from any survey or photograph: one 2,700 m runway on a 020° axis, taxiways paralleling it end to end, crossovers and turn pads, two combed rows of aircraft shelters on their own stubs, a maintenance apron with a hangar line, a support area with tower and barracks, fuel and munitions storage, twenty sentry charging pods, and a perimeter road. Outside that road a generated woodland belt wraps the base on every side, clipped to clear the built field and to stop at the edge of the modelled ground. 185 map objects in all, about 4,700 trees among them.
 
 The layout is authored in runway-local metres in `src/airbase.ts` — `u` along the runway, `v` across it — and rotated onto the base axis, so every piece stays aligned if you change the heading. Dimensions, headings, and heights are illustrative choices, not measurements, and the field does not reconstruct a real installation.
 
-The scenario runs three jet departures from the south threshold while eight sentries cover the runway and a rolled wave of ramming drones runs in from random bearings. Nothing about the outcome is authored: the engagement is decided by where the sentries are, what their radar reaches, and whether a lead intercept exists. Everything is editable afterwards — objects move with the translation handles, stations and envelopes open in the inspector, and the wave re-rolls from the Threat panel.
+The scenario runs three jet departures from the south threshold while twenty sentries rotate between a patrol ring and their pods, form up before the roll, and meet a guided wave of ramming drones. Nothing about the outcome is authored: the engagement is decided by where the sentries are, what their radar reaches, and whether a lead intercept exists. Everything is editable afterwards — objects move with the translation handles, stations and envelopes open in the inspector, and the wave re-rolls from the Threat panel.
 
 Runway end markings follow the object's rotation, so a runway you rotate repaints itself in the 01–36 convention. The ground boundary and access roads are drawn from the extent of the built field, with woodland treated as landscape outside it, and the default camera distances, zoom limits, and shadow extent scale with the scene, so small and large fields both frame correctly.
 
@@ -122,12 +107,12 @@ The base, the sentries, and the hostile drones are fictional. The departures are
 
 Observations are synthetic, seeded noisy positions with configurable loss and delay. Rain and visibility increase loss through a toy model. They are not radar waveforms.
 
-The sentry envelope borrows published uRAD Industrial v2.0 figures because they are a concrete, honest set of numbers to reason about coverage with. That is the whole extent of the borrowing: detection is a cone-and-range test against those figures, and everything after a contact — which drone goes, the crossing-point geometry, the modelled outcome — is a teaching abstraction with no basis in how any real system behaves. There is no guidance, fire control, waveform, device interface, or targeting firmware here, and that radar is an industrial sensing module, not a counter-drone product. Encounter outcomes resolve from the modelled geometry, and authored timeline events remain available alongside it. The separate hardware report is available from **Hardware lab**.
+The sentry envelope borrows published TI AWR2944P figures because they are a concrete, honest set of numbers to reason about coverage with. That is the whole extent of the borrowing: detection is a cone-and-range test against those figures, and everything after a contact — which drone goes, the crossing-point geometry, the modelled outcome — is a teaching abstraction with no basis in how any real system behaves. There is no guidance, fire control, waveform, device interface, or targeting firmware here, and that radar is an automotive sensing module, not a counter-drone product. Encounter outcomes resolve from the modelled geometry, and authored timeline events remain available alongside it. The separate hardware report is available from **Hardware lab**.
 
 ## Data and verification
 
 `ScenarioDocument` and `RunRecord` use schema version 1. Runs include a scenario snapshot and simulator version. Replay uses recorded 0.5 s frames with visual interpolation; telemetry is sampled each second. Pause and playback rates do not change simulation steps. Identical scenario and seed reproduce results within this simulator version. Invalid imports are rejected before replacing the open scenario.
 
-`npm run verify` checks representative outcomes, conflict handling, takeoff failures, energy accounting, data validation, repeatability, and the ten-minute performance case. For the engagement it checks the envelope against each published uRAD figure including the velocity ceiling, the crossing-point geometry — the abeam case, the straight-overhead case that resolves to a vertical dash, a target already past, a dash too far to make — the swept contact test that stops a fast pass slipping between two samples, that the runway centreline sits inside each sentry's envelope and that each is agile enough to cross its own bubble, that the default wave is mostly but not entirely held with every takedown inside engagement range, that a rolled wave is reproducible from its plan, and that a faster saturating wave gets through. It writes its result to the sibling outputs directory. Browser rendering, persistence, downloads, and editing are separately checked through the visible UI.
+`npm run verify` checks representative outcomes, conflict handling, takeoff failures, energy accounting, data validation, repeatability, and the ten-minute performance case. For the engagement it checks the envelope against each published sensor figure including the velocity ceiling, that the fleet patrols and charges and then takes station on cue, that the ring carries enough drones to close it and that the split matches the battery duty cycle, that a wave is guided onto the departure rather than flown on a fixed course, the crossing-point geometry — the abeam case, the straight-overhead case that resolves to a vertical dash, a target already past, a dash too far to make — the swept contact test that stops a fast pass slipping between two samples, that the runway centreline sits inside each sentry's envelope and that each is agile enough to cross its own bubble, that the default wave is mostly but not entirely held with every takedown inside engagement range, that a rolled wave is reproducible from its plan, and that a faster saturating wave gets through. It writes its result to the sibling outputs directory. Browser rendering, persistence, downloads, and editing are separately checked through the visible UI.
 
 The application targets desktop Chrome and Edge with WebGL2. All calculations and user data remain in the browser. The source uses TypeScript, Vite, and Three.js; it has no server API or environment secrets. Fonts load from Google Fonts with a system-font fallback. Hosting access is managed by your chosen provider.

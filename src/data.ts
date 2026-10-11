@@ -33,12 +33,23 @@ export function validateScenario(input: unknown): ScenarioDocument {
     number(item.climbRate, 'Climb rate', 0.1, 400); number(item.runwayLength, 'Runway length', 1, 10000);
     let previous = -1;
     list(item.powerCurve, 'Power curve', 1, 20).forEach(rawPoint => { const point = record(rawPoint, 'Power point'); number(point.speed, 'Curve speed', 0, 600); number(point.watts, 'Curve power', 0, 1000000); if (point.speed <= previous) fail('Power curve', 'speeds must be strictly increasing'); previous = point.speed; });
+    if (item.guidance !== undefined) {
+      const guidance = record(item.guidance, 'Guidance');
+      if (item.role !== 'hostile') fail('Guidance', 'only hostile drones steer at a target');
+      text(guidance.targetId, 'Guided at', 80); number(guidance.lead, 'Lead time', 0, 120); number(guidance.turnRate, 'Turn rate', 0.1, 720);
+    }
     if (item.defence !== undefined) {
       const defence = record(item.defence, 'Defence profile');
       if (item.role !== 'friendly') fail('Defence profile', 'only friendly drones can cover a station');
       vector(defence.station, 'Station'); number(defence.heading, 'Station heading', 0, 360);
       number(defence.engageRange, 'Engagement range', 0.5, 2000); text(defence.podId, 'Charging pod', 80, true);
       if (typeof defence.expendOnKill !== 'boolean') fail('Expend on kill', 'expected a boolean');
+      number(defence.readyAt, 'Take station at', 0, 2400); number(defence.chargeWatts, 'Charge power', 0, 1000000);
+      if (defence.patrol !== undefined) {
+        const patrol = record(defence.patrol, 'Patrol');
+        vector(patrol.centre, 'Patrol centre'); number(patrol.radius, 'Patrol radius', 5, 20000);
+        number(patrol.altitude, 'Patrol altitude', 1, 5000); number(patrol.phase, 'Patrol phase', -3600, 3600);
+      }
       const sensor = record(defence.sensor, 'Sensor');
       number(sensor.range, 'Sensor range', 1, 20000); number(sensor.minRange, 'Sensor minimum range', 0, 1000);
       if (sensor.minRange >= sensor.range) fail('Sensor minimum range', 'must be shorter than the measurement range');
@@ -68,6 +79,7 @@ export function validateScenario(input: unknown): ScenarioDocument {
     number(threat.altitudeMin, 'Lowest run-in', 1, 5000); number(threat.altitudeMax, 'Highest run-in', 1, 5000);
     if (threat.altitudeMin > threat.altitudeMax) fail('Lowest run-in', 'must not exceed the highest run-in');
     number(threat.standoff, 'Release distance', 50, 20000); number(threat.window, 'Release window', 0, 1200); number(threat.weave, 'Weave', 0, 5000);
+    number(threat.strikeAt, 'Strike time', 0, 2400);
   }
   if (value.referenceMap !== undefined) {
     const reference = record(value.referenceMap, 'Reference map');

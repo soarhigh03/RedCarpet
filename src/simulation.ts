@@ -1,4 +1,4 @@
-import { bearingOf, closestApproach, contact, crossingPoint } from './defence';
+import { bearingOf, closestApproach, contact, crossingPoint, DEGREES, length3, steer, unit3 } from './defence';
 import { clone, isActive, SIMULATOR_VERSION, STEP, type ScenarioDocument, type Snapshot, type UnitState, type RunRecord, type Vehicle, type Vec3, type Observation } from './types';
 
 const separation = (first: Vec3, second: Vec3) => Math.hypot(second.x - first.x, second.y - first.y, second.z - first.z);
@@ -41,7 +41,8 @@ export class Simulation {
       return {
         id: vehicle.id, position: clone(vehicle.position), velocity: { x: 0, y: 0, z: 0 }, airspeed: 0, groundSpeed: 0,
         energy: capacity, capacity, battery: 100, status: covering ? 'airborne' : 'waiting', waypoint: 0, distance: 0, departureAt: vehicle.departAt,
-        task: vehicle.defence ? 'hold' : 'none', targetId: '', tracking: '', trackCount: 0, kills: 0, heading: vehicle.defence?.heading ?? 0,
+        task: vehicle.defence ? (vehicle.defence.patrol ? 'patrol' : 'charge') : 'none',
+        targetId: '', tracking: '', trackCount: 0, kills: 0, heading: vehicle.defence?.heading ?? 0,
       };
     });
     this.snapshot = { tick: 0, time: 0, units, logs: [], observations: [], observationCount: 0, finished: false };
@@ -93,8 +94,15 @@ export class Simulation {
         if (!isActive(unit.status)) return;
         if (unit.status === 'rolling') this.roll(unit, vehicle, wind);
         else if (vehicle.defence) this.cover(unit, vehicle, wind);
+        else if (vehicle.guidance) this.guide(unit, vehicle, wind);
         else this.fly(unit, vehicle, wind);
         if (!isActive(unit.status)) return;
+        // A sentry parked on its pod is taking charge, not spending it.
+        if (unit.task === 'charge' && unit.airspeed === 0) {
+          unit.energy = Math.min(unit.capacity, unit.energy + vehicle.defence!.chargeWatts * STEP / 3600);
+          unit.battery = unit.capacity ? unit.energy / unit.capacity * 100 : 0;
+          return;
+        }
         unit.energy = Math.max(0, unit.energy - powerAt(vehicle, unit.airspeed) * STEP / 3600);
         unit.battery = unit.capacity ? unit.energy / unit.capacity * 100 : 0;
         if (unit.energy <= 0) {
@@ -160,6 +168,16 @@ export class Simulation {
    */
   private cover(unit: UnitState, vehicle: Vehicle, wind: Vec3) {
     const defence = vehicle.defence!;
+    // Before a departure the fleet is split: some fly the ring, the rest sit on pods taking charge.
+    // Both still watch, and both drop what they are doing to take station at readyAt.
+    if (unit.task === 'patrol' || unit.task === 'charge') {
+      if (this.snapshot.time >= defence.readyAt) {
+        const was = unit.task;
+        unit.task = 'return';
+        this.log('flight', `${vehicle.label}: ${was === 'charge' ? `off the pod at ${unit.battery.toFixed(0)}%` : 'off patrol'}, taking station`, unit.id);
+      } else if (unit.task === 'patrol') { this.orbit(unit, vehicle, wind); return; }
+      else { this.perch(unit, vehicle); return; }
+    }
     const chase = unit.task === 'intercept' ? this.snapshot.units.find(item => item.id === unit.targetId) : undefined;
     const cruise = Math.min(vehicle.speed, vehicle.maxSpeed);
     // Dash square onto the target's track rather than chasing it. Over a 50 m envelope there is no
@@ -192,6 +210,75 @@ export class Simulation {
     unit.groundSpeed = Math.hypot(unit.velocity.x, unit.velocity.z);
     unit.position.x += unit.velocity.x * STEP; unit.position.y = Math.max(3, unit.position.y + unit.velocity.y * STEP); unit.position.z += unit.velocity.z * STEP;
     unit.distance += Math.hypot(unit.velocity.x, unit.velocity.y, unit.velocity.z) * STEP;
+  }
+  /**
+   * Fly the ring. The drone reads its own bearing from the centre and chases a point a little way
+   * round from it, so the lap is self correcting rather than a replayed path, and its radar sweeps
+   * outward as it goes. Revisit at any bearing works out at 2R/v and does not depend on the radius.
+   */
+  private orbit(unit: UnitState, vehicle: Vehicle, wind: Vec3) {
+    const patrol = vehicle.defence!.patrol!;
+    const cruise = Math.min(vehicle.speed, vehicle.maxSpeed);
+    const bearing = Math.atan2(unit.position.x - patrol.centre.x, -(unit.position.z - patrol.centre.z));
+    const ahead = bearing + Math.max(0.12, cruise * STEP * 4 / patrol.radius);
+    const mark = {
+      x: patrol.centre.x + Math.sin(ahead) * patrol.radius,
+      y: patrol.altitude,
+      z: patrol.centre.z - Math.cos(ahead) * patrol.radius,
+    };
+    const offset = { x: mark.x - unit.position.x, y: mark.y - unit.position.y, z: mark.z - unit.position.z };
+    const flat = Math.hypot(offset.x, offset.z) || 1;
+    unit.airspeed = settle(unit.airspeed, cruise, vehicle.acceleration);
+    const vertical = Math.max(-vehicle.climbRate, Math.min(vehicle.climbRate, offset.y));
+    const level = Math.sqrt(Math.max(0, unit.airspeed ** 2 - vertical ** 2));
+    unit.velocity = { x: offset.x / flat * level + wind.x, y: vertical, z: offset.z / flat * level + wind.z };
+    unit.groundSpeed = Math.hypot(unit.velocity.x, unit.velocity.z);
+    // Sensor looks outward from the ring, which is where anything inbound has to come from.
+    unit.heading = bearingOf(unit.position.x - patrol.centre.x, unit.position.z - patrol.centre.z);
+    unit.position.x += unit.velocity.x * STEP; unit.position.y = Math.max(3, unit.position.y + unit.velocity.y * STEP); unit.position.z += unit.velocity.z * STEP;
+    unit.distance += length3(unit.velocity) * STEP;
+  }
+  /** Sit on the pod and draw charge. The radar still runs, so a pod is a cheap static picket. */
+  private perch(unit: UnitState, vehicle: Vehicle) {
+    const defence = vehicle.defence!;
+    const pod = this.scenario.objects.find(object => object.id === defence.podId);
+    const rest = pod ? { x: pod.position.x, y: pod.position.y + pod.size.y, z: pod.position.z } : defence.station;
+    unit.position = { ...rest }; unit.heading = defence.heading;
+    unit.velocity = { x: 0, y: 0, z: 0 }; unit.airspeed = 0; unit.groundSpeed = 0;
+  }
+  /**
+   * A guided hostile re-aims every step instead of flying a fixed course: it leads the target by
+   * the time it takes to close, and its heading may only swing at its turn rate. Nothing is
+   * precomputed, which is what lets it follow a target that is still accelerating away.
+   */
+  private guide(unit: UnitState, vehicle: Vehicle, wind: Vec3) {
+    const guidance = vehicle.guidance!;
+    const target = this.snapshot.units.find(item => item.id === guidance.targetId);
+    if (!target || !isActive(target.status)) { this.fly(unit, vehicle, wind); return; }
+    const cruise = Math.min(vehicle.speed, vehicle.maxSpeed);
+    unit.airspeed = settle(unit.airspeed, cruise, vehicle.acceleration);
+    const gap = { x: target.position.x - unit.position.x, y: target.position.y - unit.position.y, z: target.position.z - unit.position.z };
+    const range = length3(gap);
+    const ahead = Math.min(guidance.lead, range / Math.max(1, unit.airspeed));
+    const aim = {
+      x: gap.x + target.velocity.x * ahead,
+      y: gap.y + target.velocity.y * ahead,
+      z: gap.z + target.velocity.z * ahead,
+    };
+    const flying = length3(unit.velocity) > 0.5 ? unit3(unit.velocity) : unit3(gap);
+    const course = steer(flying, unit3(aim), guidance.turnRate / DEGREES * STEP);
+    const vertical = Math.max(-vehicle.climbRate, Math.min(vehicle.climbRate, course.y * unit.airspeed));
+    const flat = Math.hypot(course.x, course.z) || 1;
+    const level = Math.sqrt(Math.max(0, unit.airspeed ** 2 - vertical ** 2));
+    unit.velocity = { x: course.x / flat * level + wind.x, y: vertical, z: course.z / flat * level + wind.z };
+    unit.groundSpeed = Math.hypot(unit.velocity.x, unit.velocity.z);
+    unit.heading = bearingOf(gap.x, gap.z);
+    unit.position.x += unit.velocity.x * STEP; unit.position.y = Math.max(3, unit.position.y + unit.velocity.y * STEP); unit.position.z += unit.velocity.z * STEP;
+    unit.distance += length3(unit.velocity) * STEP;
+    if (range <= Math.max(8, unit.airspeed * STEP * 2)) {
+      unit.status = 'complete'; unit.velocity = { x: 0, y: 0, z: 0 }; unit.airspeed = 0; unit.groundSpeed = 0;
+      this.log('warning', `${vehicle.label}: reached ${this.label(target.id)} unengaged`, unit.id);
+    }
   }
   private label(id: string) { return this.scenario.vehicles.find(vehicle => vehicle.id === id)?.label ?? id; }
   /**
