@@ -197,7 +197,7 @@ function makeAirbaseScenario(): Partial<ScenarioDocument> {
   return rollWave(base, base.threat!);
 }
 export const presets = [
+  ['airbase', 'Tactical air base', 'Covering screen · guided wave · hard kill'],
   ['successful', 'Successful defense', 'Two authored encounters'], ['unsuccessful', 'Open corridor', 'Pass-through & departure hold'],
   ['battery', 'Last reserve', 'Battery exhaustion'], ['weather', 'Storm front', 'Adverse weather'], ['stress', 'Performance lab', '50 drones · 3 aircraft · 10 min'],
-  ['airbase', 'Tactical air base', 'Shelter rows · 3 departures · intrusion'],
 ] as const;

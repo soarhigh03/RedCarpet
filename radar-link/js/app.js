@@ -21,7 +21,7 @@
     speed: 5, window: 10,
     baud: 115200, bridgeUrl: 'ws://' + bridgeHost + ':8787',
     bleService: RL.NUS.service, bleNotify: RL.NUS.notify, bleShowAll: true,
-    interval: 100,
+    interval: 100, sound: true,
   };
   const SETTINGS_KEY = 'radarlink.settings.v1';
   let settings = Object.assign({}, DEFAULTS);
@@ -48,6 +48,8 @@
     captureTruncated: false,
     /** An explicitly marked segment, started and stopped by hand. */
     recording: { active: false, startedAt: 0, startedWall: null, lines: [], frames: 0, truncated: false },
+    /** Drone-present edge and the last time the tone played. */
+    alarm: { droneUp: false, lastAt: -99 },
     logTab: 'stream',
     problems: 0,
     logCount: 0,
@@ -75,12 +77,14 @@
     replayClock: '#replay-clock', replayScrub: '#replay-scrub', replaySpeed: '#replay-speed', replayLoop: '#replay-loop',
     fileInput: '#file-input', toast: '#toast',
     recordBtn: '#record-btn', recordStop: '#record-stop',
+    threatAlert: '#threat-alert', threatAction: '#threat-action', soundBtn: '#sound-btn',
     settingsDialog: '#settings-dialog', helpDialog: '#help-dialog',
     footDot: '#foot-dot', footLink: '#foot-link', footSource: '#foot-source', footStats: '#foot-stats', footRate: '#foot-rate',
     inspIcon: '#insp-icon', inspName: '#insp-name', inspBadge: '#insp-badge', inspSub: '#insp-sub', inspWire: '#insp-wire',
   });
   const text = (id, value) => { const node = $(id); if (node && node.textContent !== value) node.textContent = value; };
 
+  const sound = RL.Sound();
   const scope = RL.Scope(els.scope);
   const strips = {
     range: RL.Strip($('#strip-range'), { color: '#3f8a71', format: (v) => RL.fmt.distance(v, 1) }),
@@ -386,16 +390,28 @@
     return Array.from(state.tracks.values()).sort((a, b) => a.idx - b.idx);
   }
 
-  function pickAuto() {
+  /**
+   * The contact that matters most right now: a drone over a moving object, a solved
+   * intercept over a chase, then whichever is soonest or nearest. The alert and the
+   * default selection both read this, so the banner and the panel never disagree.
+   */
+  function mostUrgent() {
     const live = trackList().filter((track) => !track.stale && track.row);
     if (!live.length) return null;
-    const solved = live.filter((track) => track.row.solved);
-    const pool = solved.length ? solved : live;
-    return pool.reduce((best, track) => {
+    const drones = live.filter((track) => track.cls === 2);
+    const pool = drones.length ? drones : live;
+    const solved = pool.filter((track) => track.row.solved);
+    const field = solved.length ? solved : pool;
+    return field.reduce((best, track) => {
       const value = track.row.solved ? track.row.ttgS : track.row.rangeM;
       const bestValue = best.row.solved ? best.row.ttgS : best.row.rangeM;
       return value < bestValue ? track : best;
-    }).idx;
+    });
+  }
+
+  function pickAuto() {
+    const track = mostUrgent();
+    return track ? track.idx : null;
   }
 
   function selectedTrack() {
@@ -492,6 +508,65 @@
     els.runStatus.className = 'status-pill' + (tone ? ' ' + tone : '');
     text('#run-status-label', label);
     text('#frame-tag', state.stats.frames ? state.stats.frames + ' frames · ' + state.stats.dropped + ' dropped' : '');
+  }
+
+  const ARROW_GLYPH = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>';
+
+  const SPEAKER_ON = '<svg class="ico" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4ZM16.5 8.5a5 5 0 0 1 0 7M19 6a8 8 0 0 1 0 12"/></svg>';
+  const SPEAKER_OFF = '<svg class="ico" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4ZM17 9l5 6M22 9l-5 6"/></svg>';
+
+  /**
+   * Sound the alert on the edge into a drone being present, then repeat while it is
+   * still there. Repeating on a timer rather than every frame keeps a contact that
+   * flickers in and out from turning into a stutter.
+   */
+  function soundAlarm(droneUp) {
+    const at = now();
+    const alarm = state.alarm;
+    const firstSight = droneUp && !alarm.droneUp;
+    if (settings.sound && droneUp && (firstSight || at - alarm.lastAt > 2)) {
+      if (sound.alert()) alarm.lastAt = at;
+      else if (firstSight) note('Drone detected, but the browser has not allowed audio yet — click the page once.');
+    }
+    alarm.droneUp = droneUp;
+  }
+
+  function syncSound(play) {
+    els.soundBtn.innerHTML = settings.sound ? SPEAKER_ON : SPEAKER_OFF;
+    els.soundBtn.classList.toggle('muted', !settings.sound);
+    els.soundBtn.title = settings.sound ? 'Alert sound on · click to mute' : 'Alert sound muted · click to turn on';
+    els.soundBtn.setAttribute('aria-pressed', String(settings.sound));
+    if (play && settings.sound) sound.alert();
+  }
+
+  /** The banner: what was found, and what to do about it. */
+  function renderAlert() {
+    const live = trackList().filter((track) => !track.stale && track.row);
+    const threat = mostUrgent();
+    if (!threat) { soundAlarm(false); els.threatAlert.hidden = true; return; }
+
+    const drones = live.filter((track) => track.cls === 2);
+    const isDrone = drones.length > 0;
+    soundAlarm(isDrone);
+    els.threatAlert.hidden = false;
+    els.threatAlert.dataset.level = isDrone ? 'drone' : 'mover';
+
+    const count = isDrone ? drones.length : live.length;
+    text('#threat-title', (isDrone ? '드론 발견' : '이동체 발견') + (count > 1 ? ' ×' + count : ''));
+
+    const row = threat.row;
+    text('#threat-where', RL.fmt.distance(row.rangeM) + ' · 방위 ' + RL.fmt.bearing(row.bearingDeg, 1) +
+      ' · ' + (row.closingMs > 0 ? '접근 ' : row.closingMs < 0 ? '이탈 ' : '정지 ') +
+      Math.abs(row.closingMs).toFixed(2) + ' m/s');
+
+    // The go-to vector, said as an instruction rather than as two more numbers.
+    els.threatAction.innerHTML = ARROW_GLYPH +
+      '<span><b>' + RL.fmt.heading(row.command.headingDeg) + '</b> 방향</span>' +
+      '<span><b>' + row.command.speed.toFixed(1) + ' m/s</b></span>' +
+      '<i class="sep"></i>' +
+      (row.solved
+        ? '<span><b>' + RL.fmt.duration(row.ttgS) + '</b> 후 요격</span>'
+        : '<span class="chase">추적만 · 요격해 없음</span>');
   }
 
   function renderInspector(track) {
@@ -642,6 +717,7 @@
     if (at - lastUi > 1 / 20) {
       lastUi = at;
       renderHud(track);
+      renderAlert();
       renderInspector(track);
       renderStrips(track);
       renderTrackList();
@@ -658,6 +734,7 @@
 
   // ── Interaction ──────────────────────────────────────────
   document.addEventListener('click', (event) => {
+    sound.unlock();                      // audio may only start from a gesture
     const target = event.target.closest('[data-action]');
     if (!target) return;
     const action = target.dataset.action, value = target.dataset.value;
@@ -705,7 +782,13 @@
       els.logList.innerHTML = ''; els.problemList.innerHTML = '';
       state.logCount = 0; state.problems = 0;
       text('#log-count', '0'); text('#problem-count', '0');
-    } else if (action === 'record') { if (!state.recording.active) startRecording(); }
+    } else if (action === 'sound') {
+      settings.sound = !settings.sound;
+      saveSettings();
+      syncSound(settings.sound);         // play it once when turning it on, as a check
+      toast(settings.sound ? 'Drone alert sound on.' : 'Drone alert sound muted.');
+    }
+    else if (action === 'record') { if (!state.recording.active) startRecording(); }
     else if (action === 'record-stop') { stopRecording(); }
     else if (action === 'export') { exportCapture(); }
     else if (action === 'settings') { openSettings(); }
@@ -911,6 +994,7 @@
 
   for (const side of ['left', 'right', 'bottom']) document.documentElement.dataset[side + 'Dock'] = 'open';
   applySettings();
+  syncSound(false);
   describeSupport();
   syncMode();
   syncReplayUi();

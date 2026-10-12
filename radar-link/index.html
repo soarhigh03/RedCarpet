@@ -36,6 +36,7 @@
       <button class="button quiet" data-action="record-stop" id="record-stop" disabled title="Stop recording and save the file">
         <svg class="ico" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor"/></svg> <span>Stop &amp; save</span>
       </button>
+      <button class="icon-button" data-action="sound" id="sound-btn" aria-label="Alert sound" title="Alert sound on drone detection"></button>
       <button class="button quiet" data-action="export" title="Save every line received since the link opened">
         <svg class="ico" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg> <span>Export all</span>
       </button>
@@ -52,6 +53,16 @@
     <div class="viewport-wrap">
       <canvas id="scope"></canvas>
 
+      <div class="top-stack">
+      <div class="threat-alert" id="threat-alert" data-level="drone" hidden>
+        <div class="threat-headline">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M12 3 2 20h20Z"/><path d="M12 10v4M12 17h.01"/></svg>
+          <b id="threat-title">드론 발견</b>
+          <small id="threat-where"></small>
+        </div>
+        <div class="threat-action" id="threat-action"></div>
+      </div>
+
       <div class="defence-hud" id="hud">
         <div><span>RANGE</span><b id="hud-range">—</b><small id="hud-range-sub">&nbsp;</small></div>
         <div><span>BEARING</span><b id="hud-bearing">—</b><small id="hud-bearing-sub">&nbsp;</small></div>
@@ -59,6 +70,7 @@
         <div id="hud-ttg-cell"><span>TIME TO GO</span><b id="hud-ttg">—</b><small id="hud-ttg-sub">&nbsp;</small></div>
         <div class="hud-sentries"><span>COMMAND</span><b id="hud-command">—</b><small id="hud-command-sub">&nbsp;</small></div>
         <div><span>FRAME RATE</span><b id="hud-rate">—</b><small id="hud-rate-sub">&nbsp;</small></div>
+      </div>
       </div>
 
       <div class="viewport-status">
@@ -392,6 +404,7 @@ G,frame,-1        ← 이 프레임에 표적 없음</pre>
 <div class="toast" id="toast" role="status"></div>
 
 <script src="js/format.js"></script>
+<script src="js/sound.js"></script>
 <script src="js/protocol.js"></script>
 <script src="js/synthetic.js"></script>
 <script src="js/transports.js"></script>

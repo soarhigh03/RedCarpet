@@ -86,7 +86,31 @@ a { color: inherit; text-decoration: none; }
 .viewport-wrap { position: absolute; inset: 0; background: #d9e4e6; }
 #scope { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
 
-.defence-hud { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: stretch; gap: 1px; background: #ffffffb8; border: 1px solid #ffffffb3; border-radius: 8px; box-shadow: 0 3px 16px #1c3a4520; backdrop-filter: blur(8px); overflow: hidden; pointer-events: none; }
+/* The alert and the readout share one centred column, so the HUD moves down on its
+   own when a threat is up and the scope reads the new top edge without a magic number. */
+.top-stack { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; max-width: calc(100vw - 620px); }
+
+.threat-alert { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 13px 26px 14px; border-radius: 11px; border: 2px solid; background: #fff; box-shadow: 0 6px 30px #1c3a4533; text-align: center; }
+.threat-alert[data-level=drone] { border-color: #d4452a; background: #fff4f0; animation: threat 1.5s ease-in-out infinite; }
+.threat-alert[data-level=mover] { border-color: #b8893c; background: #fdf8ef; }
+@keyframes threat { 50% { border-color: #ff7a52; box-shadow: 0 6px 34px #d4452a40; } }
+
+.threat-headline { display: flex; align-items: center; gap: 11px; }
+.threat-headline .ico { width: 34px; height: 34px; stroke-width: 2; }
+.threat-headline b { font-size: 34px; line-height: 1; font-weight: 800; letter-spacing: -0.03em; }
+.threat-headline small { font-size: 13px; color: #8c7d78; white-space: nowrap; }
+.threat-alert[data-level=drone] .threat-headline { color: #c7301a; }
+.threat-alert[data-level=mover] .threat-headline { color: #9a6f28; }
+.threat-alert[data-level=mover] .threat-headline b { font-size: 26px; font-weight: 750; }
+
+/* The course of action. Dark plate with the lime of the go-to arrow on the scope. */
+.threat-action { display: flex; align-items: center; gap: 9px; padding: 9px 16px; border-radius: 8px; background: #16252e; color: #dcebe4; font-size: 19px; font-weight: 600; white-space: nowrap; }
+.threat-action .ico { width: 20px; height: 20px; color: var(--accent); stroke-width: 2.2; }
+.threat-action b { color: var(--accent); font-size: 21px; font-weight: 700; }
+.threat-action .sep { width: 1px; height: 17px; background: #3a4f58; }
+.threat-action .chase { color: #e8b45f; }
+
+.defence-hud { display: flex; align-items: stretch; gap: 1px; background: #ffffffb8; border: 1px solid #ffffffb3; border-radius: 8px; box-shadow: 0 3px 16px #1c3a4520; backdrop-filter: blur(8px); overflow: hidden; pointer-events: none; }
 .defence-hud > div { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 13px; background: #ffffff59; min-width: 84px; }
 .defence-hud span { font-size: 10px; letter-spacing: .04em; color: #7f949c; }
 .defence-hud b { font-size: 19px; font-weight: 500; line-height: 1; color: #35525d; }
@@ -343,3 +367,6 @@ kbd { padding: 3px 5px; background: #f1f5f4; border: 1px solid #e3ebe7; border-r
   .scene-key { bottom: 148px; }
   .viewport-footer { padding-bottom: 132px; }
 }
+
+.app-header .icon-button.muted { color: #6e8491; }
+.app-header .icon-button.muted:hover { color: #b7cad3; }

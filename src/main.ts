@@ -28,12 +28,13 @@ const roleName = (role: string) => ({ friendly: 'Friendly', hostile: 'Intruder',
 const isShahedVisual = (vehicle: Vehicle) => vehicle.role === 'hostile' && vehicle.kind === 'fixed-wing';
 const actionName = (action: string) => ({ stop: 'Intruder stopped', expend: 'Defender expended', continue: 'Intruder continues', launch: 'Launch vehicle', delay: 'Delay departure' }[action] ?? action);
 const $ = <ElementType extends HTMLElement = HTMLElement>(selector: string) => document.querySelector<ElementType>(selector)!;
-let scenario = makeScenario();
+// The covering screen is what the sandbox is for, so that is what a visit opens on.
+let scenario = makeScenario('airbase');
 let storageWarning = '';
 let appearance: SceneAppearance = 'holographic';
 try { appearance = appearanceFromStorage(localStorage.getItem('airfield.appearance.v1')); } catch {}
 document.documentElement.dataset.appearance = appearance;
-try { const saved = localStorage.getItem('airfield.scenario.v1'); if (saved) scenario = validateScenario(JSON.parse(saved)); } catch { storageWarning = 'The previous local project could not be loaded. A demo is ready.'; }
+try { const saved = localStorage.getItem('airfield.scenario.v2'); if (saved) scenario = validateScenario(JSON.parse(saved)); } catch { storageWarning = 'The previous local project could not be loaded. A demo is ready.'; }
 let selected = scenario.vehicles[0].id;
 let sceneTab = 'vehicles'; let search = ''; let panel = 'workspace'; let logTab = 'log';
 /** 'simulate' keeps the tactical view clear; 'build' is where the scene gets edited. */
@@ -107,7 +108,7 @@ $('#app').innerHTML = `
 `;
 
 function toast(message: string) { clearTimeout(toastTimer); $('#toast').textContent = message; $('#toast').classList.add('visible'); toastTimer = setTimeout(() => $('#toast').classList.remove('visible'), 4500); }
-function persist() { try { localStorage.setItem('airfield.scenario.v1', JSON.stringify(scenario)); $('#save-status').textContent = 'Saved locally'; } catch { $('#save-status').textContent = 'Export to save'; toast('Browser storage is unavailable or full. Export your scenario to keep a copy.'); } }
+function persist() { try { localStorage.setItem('airfield.scenario.v2', JSON.stringify(scenario)); $('#save-status').textContent = 'Saved locally'; } catch { $('#save-status').textContent = 'Export to save'; toast('Browser storage is unavailable or full. Export your scenario to keep a copy.'); } }
 function resetRun() { breaches = 0; $('#breach')?.classList.remove('hit'); replayRecord = undefined; replayPlaying = false; playing = false; liveHistory = []; send({ type: 'load', scenario }); world?.setRunning(false); $('#scrub').removeAttribute('style'); ($('#scrub') as HTMLInputElement).disabled = true; ($('#scrub') as HTMLInputElement).max = String(scenario.duration); }
 function commit(change: (draft: ScenarioDocument) => void, message = 'Scenario updated. Run reset.') {
   try {
@@ -364,8 +365,10 @@ function imageMapDialog() {
     close();
   });
 }
+/** Card art keyed by preset, so the library can be reordered without shuffling the icons. */
+const presetIcons: Record<string, string> = { airbase: 'shield', weather: 'wind', battery: 'bolt', stress: 'layers' };
 function libraryDialog() {
-  modal('Scenario library', 'Start from an authored example, then make it your own.', `<div class="preset-grid">${presets.map(([id, title, description], index) => `<button class="preset-card preset-${id}" data-action="preset" data-value="${id}"><div class="preset-art"><i></i><span>${String(index + 1).padStart(2, '0')}</span>${icon(index === 3 ? 'wind' : index === 2 ? 'bolt' : index === 4 ? 'layers' : 'map', 36)}</div><h3>${title}</h3><p>${description}</p><span class="preset-open">Open scenario ${icon('arrow', 15)}</span></button>`).join('')}<button class="preset-card recorded" data-action="load-record"><div class="preset-art">${icon('replay', 36)}</div><h3>Last saved run</h3><p>Replay the latest recorded session</p><span class="preset-open">Load recording ${icon('arrow', 15)}</span></button></div><p class="library-note">Your current scenario is saved locally. Switching examples can be undone.</p>`, true);
+  modal('Scenario library', 'Start from an authored example, then make it your own.', `<div class="preset-grid">${presets.map(([id, title, description], index) => `<button class="preset-card preset-${id}" data-action="preset" data-value="${id}"><div class="preset-art"><i></i><span>${String(index + 1).padStart(2, '0')}</span>${icon(presetIcons[id] ?? 'map', 36)}</div><h3>${title}</h3><p>${description}</p><span class="preset-open">Open scenario ${icon('arrow', 15)}</span></button>`).join('')}<button class="preset-card recorded" data-action="load-record"><div class="preset-art">${icon('replay', 36)}</div><h3>Last saved run</h3><p>Replay the latest recorded session</p><span class="preset-open">Load recording ${icon('arrow', 15)}</span></button></div><p class="library-note">Your current scenario is saved locally. Switching examples can be undone.</p>`, true);
 }
 function addDialog() {
   modal('Add to your airfield', 'Choose a vehicle or a piece of the scene.', `<div class="add-options"><h3>Vehicles</h3>${(['friendly', 'hostile', 'aircraft'] as const).map(role => `<button data-action="add-vehicle" data-value="${role}"><span class="entity-icon ${role}">${icon(role === 'aircraft' ? 'jet' : 'drone', 24)}</span><span><b>${role === 'friendly' ? 'Friendly defender' : role === 'hostile' ? 'Hostile intruder' : 'Aircraft'}</b><small>${role === 'aircraft' ? 'Conventional takeoff profile' : 'Editable route & energy profile'}</small></span>${icon('plus', 16)}</button>`).join('')}<h3>Airfield objects</h3><div class="object-options">${(['hangar', 'building', 'tower', 'runway', 'taxiway', 'trees', 'zone'] as const).map(kind => `<button data-action="add-object" data-value="${kind}">${icon(kind === 'runway' || kind === 'taxiway' ? 'map' : 'building', 17)} ${kind}</button>`).join('')}</div></div>`);

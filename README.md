@@ -72,7 +72,9 @@ The window belongs to the 3D view. Panels float over it and each one collapses: 
 
 The header switches between **Simulate** and **Map setup**. Simulate is the tactical view — forces, threat rolls, the engagement. Map setup is where scene building lives: the object list, the add-object palette, weather, and the image-to-3D editor. Adding an object switches you there; adding a vehicle switches you back.
 
-1. Open **Scenarios** to select one of six examples. The performance example includes fifty drones and three aircraft over ten simulated minutes.
+The site opens on the tactical air base — the covering screen, the rotation, and a guided wave — rather than on a blank field.
+
+1. Open **Scenarios** to switch between six examples; the air base leads the list. The performance example includes fifty drones and three aircraft over ten simulated minutes.
 2. Select a vehicle or map object in the scene explorer. Edit the inspector and choose **Apply changes**. A sentry gains two extra sections: its covering station and boresight, and its radar envelope. Map objects can also be moved with the 3D translation handles. Edits reset the current run and are undoable.
 3. Vehicles have an ordered waypoint route. Coordinates use metres with X east, Y up, and negative Z north. **Add waypoints on map** appends points at 150 m altitude. All routes and altitude values can be edited numerically. Scenes with more than twelve vehicles show the selected route and avoid overlapping labels.
 4. **Add event** creates an authored timeline outcome, which still works alongside the live engagement. Launch and delay events require a waiting vehicle. Stop, expend, and continue require active participants. A supporting participant, when supplied, must be active. Conflicting events are skipped with a reason in the flight log. Events at the same time are ordered by event ID.
